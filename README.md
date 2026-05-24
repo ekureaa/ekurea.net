@@ -1,6 +1,6 @@
-# ekurea.net Vue
+# ekurea.net
 
-Vue 3 / Vite / Vue Router / Tailwind CSS で制作した個人ホームページです。
+私のホームページです。
 
 ## Setup
 
@@ -34,7 +34,3 @@ npm run photos:build
 `src/data/photos.json` には自動で追記されます。同じ画像は重複追加されません。
 
 ファイル名が `2026-05-25.png` のような日付形式を含む場合、`date` も自動で入ります。
-
-## Credits
-
-Photo placeholders use images from [Unsplash](https://unsplash.com/license).
