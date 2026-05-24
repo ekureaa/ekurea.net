@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "photos:build": "node scripts/build-photos.mjs"
+    "preview": "npm run build && wrangler dev",
+    "photos:build": "node scripts/build-photos.mjs",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@lucide/vue": "^1.16.0",
@@ -16,12 +17,14 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.38.0",
     "@tailwindcss/vite": "^4.1.12",
     "@vitejs/plugin-vue": "^5.2.1",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.12",
     "typescript": "^5.6.3",
     "vite": "^6.3.5",
-    "vue-tsc": "^2.2.0"
+    "vue-tsc": "^2.2.0",
+    "wrangler": "^4.94.0"
   }
 }
