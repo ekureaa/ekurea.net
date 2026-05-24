@@ -1,0 +1,27 @@
+{
+  "name": "ekurea-net-vue",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "photos:build": "node scripts/build-photos.mjs"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.16.0",
+    "simple-icons": "^16.21.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.12",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "sharp": "^0.34.5",
+    "tailwindcss": "^4.1.12",
+    "typescript": "^5.6.3",
+    "vite": "^6.3.5",
+    "vue-tsc": "^2.2.0"
+  }
+}

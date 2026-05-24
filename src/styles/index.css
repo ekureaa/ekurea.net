@@ -1,0 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap');
+@import 'tailwindcss' source(none);
+@source '../**/*.{vue,ts}';
+
+@theme {
+  --font-sans: "Zen Maru Gothic", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-cream: #fffaf4;
+  --color-milk: #fffdf9;
+  --color-blush: #ffe8ec;
+  --color-peach: #ffd7c2;
+  --color-mint-soft: #d9f0e7;
+  --color-ink: #3b3535;
+  --color-ink-soft: #756b6b;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #fffaf4;
+  color: #3b3535;
+  font-family: var(--font-sans);
+}
+
+a {
+  color: inherit;
+}
+
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 420ms ease;
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}
