@@ -123,7 +123,7 @@ watch(hasMorePhotos, (hasMore) => {
     <div class="mx-auto max-w-7xl px-6 py-10 sm:px-10 sm:py-14">
       <RouterLink
         to="/"
-        class="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm text-ink-soft shadow-sm transition hover:bg-blush hover:text-ink focus:outline-none focus:ring-2 focus:ring-peach"
+        class="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm text-ink-soft shadow-sm transition hover:bg-[#eaded2] hover:text-ink focus:outline-none focus:ring-2 focus:ring-peach"
       >
         <ArrowLeft :size="18" />
         Back
