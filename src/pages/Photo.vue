@@ -141,7 +141,7 @@ watch(hasMorePhotos, (hasMore) => {
         >
           <button
             type="button"
-            class="block aspect-square w-full overflow-hidden bg-blush text-left focus:outline-none focus:ring-2 focus:ring-peach"
+            class="block aspect-[3/4] w-full overflow-hidden bg-blush text-left focus:outline-none focus:ring-2 focus:ring-peach"
             @click="openPhoto(photo)"
           >
             <img
