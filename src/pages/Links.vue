@@ -49,9 +49,6 @@ const links = [
 
       <header class="mt-10">
         <h1 class="text-4xl font-medium leading-tight text-ink sm:text-5xl">Links</h1>
-        <p class="mt-5 text-base leading-8 text-ink-soft">
-          SNSや外部サービスへのリンクをまとめています。
-        </p>
       </header>
 
       <section class="mt-10 space-y-4">
