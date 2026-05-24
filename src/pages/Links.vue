@@ -41,7 +41,7 @@ const links = [
     <div class="mx-auto max-w-3xl px-6 py-10 sm:px-10 sm:py-14">
       <RouterLink
         to="/"
-        class="inline-flex items-center gap-2 rounded-full bg-cream px-4 py-2 text-sm text-ink-soft transition hover:bg-[#eaded2] hover:text-ink focus:outline-none focus:ring-2 focus:ring-peach"
+        class="inline-flex items-center gap-2 rounded-full bg-cream px-4 py-2 text-sm text-ink-soft transition hover:bg-brown-soft hover:text-ink focus:outline-none focus:ring-2 focus:ring-peach"
       >
         <ArrowLeft :size="18" />
         Back
@@ -58,7 +58,7 @@ const links = [
           :href="link.url"
           target="_blank"
           rel="noopener noreferrer"
-          class="flex items-center gap-4 rounded-lg bg-cream p-5 shadow-sm transition hover:-translate-y-0.5 hover:bg-blush hover:shadow-md focus:outline-none focus:ring-2 focus:ring-peach"
+          class="flex items-center gap-4 rounded-lg bg-cream p-5 shadow-sm transition hover:-translate-y-0.5 hover:bg-brown-soft hover:shadow-md focus:outline-none focus:ring-2 focus:ring-peach"
         >
           <span class="grid size-12 shrink-0 place-items-center rounded-full bg-white text-ink">
             <svg
