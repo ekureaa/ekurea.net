@@ -123,7 +123,7 @@ watch(hasMorePhotos, (hasMore) => {
     <div class="mx-auto max-w-7xl px-6 py-10 sm:px-10 sm:py-14">
       <RouterLink
         to="/"
-        class="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm text-ink-soft shadow-sm transition hover:bg-[#eaded2] hover:text-ink focus:outline-none focus:ring-2 focus:ring-peach"
+        class="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm text-ink-soft shadow-sm transition hover:bg-brown-soft hover:text-ink focus:outline-none focus:ring-2 focus:ring-peach"
       >
         <ArrowLeft :size="18" />
         Back
@@ -173,7 +173,7 @@ watch(hasMorePhotos, (hasMore) => {
       >
         <button
           type="button"
-          class="absolute right-4 top-4 grid size-11 place-items-center rounded-full bg-white/12 text-white transition hover:bg-white/22 focus:outline-none sm:right-6 sm:top-6"
+          class="lightbox-close absolute right-4 top-4 grid size-11 place-items-center rounded-full bg-white/12 text-white transition hover:bg-white/22 focus:outline-none sm:right-6 sm:top-6"
           aria-label="Close photo"
           @click="closePhoto"
         >
@@ -183,7 +183,7 @@ watch(hasMorePhotos, (hasMore) => {
         <img
           :src="selectedPhotoUrl"
           :alt="selectedPhoto.alt"
-          class="h-auto max-h-[calc(100dvh-6rem)] w-auto max-w-[calc(100vw-2rem)] select-none object-contain sm:max-h-[calc(100dvh-4rem)] sm:max-w-[calc(100vw-4rem)]"
+          class="lightbox-photo h-auto max-h-[calc(100dvh-6rem)] w-auto max-w-[calc(100vw-2rem)] select-none object-contain sm:max-h-[calc(100dvh-4rem)] sm:max-w-[calc(100vw-4rem)]"
           draggable="false"
           decoding="async"
         />
@@ -195,11 +195,30 @@ watch(hasMorePhotos, (hasMore) => {
 <style scoped>
 .lightbox-enter-active,
 .lightbox-leave-active {
-  transition: opacity 220ms ease;
+  transition: opacity 360ms ease;
 }
 
 .lightbox-enter-from,
 .lightbox-leave-to {
   opacity: 0;
+}
+
+.lightbox-photo,
+.lightbox-close {
+  transition:
+    opacity 360ms ease,
+    transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lightbox-enter-from .lightbox-photo,
+.lightbox-leave-to .lightbox-photo {
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+}
+
+.lightbox-enter-from .lightbox-close,
+.lightbox-leave-to .lightbox-close {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.92);
 }
 </style>

@@ -10,7 +10,7 @@ const navLinks = [
 </script>
 
 <template>
-  <main class="relative min-h-dvh select-none overflow-hidden bg-ink">
+  <main class="relative min-h-dvh select-none overflow-hidden bg-milk">
     <img
       :src="homeImage"
       alt="ekurea.net home background"
