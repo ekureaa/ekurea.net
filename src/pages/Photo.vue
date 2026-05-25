@@ -53,10 +53,19 @@ const photosPerPage = 24
 const selectedPhoto = ref<Photo | null>(null)
 const visibleCount = ref(Math.min(photosPerPage, photos.length))
 const loadMoreTrigger = ref<HTMLElement | null>(null)
+const loadedPhotoIds = ref(new Set<number>())
 const selectedPhotoUrl = computed(() => selectedPhoto.value?.largeUrl || selectedPhoto.value?.url || '')
 const visiblePhotos = computed(() => photos.slice(0, visibleCount.value))
 const hasMorePhotos = computed(() => visibleCount.value < photos.length)
 let loadMoreObserver: IntersectionObserver | null = null
+
+function isPhotoLoaded(photoId: number) {
+  return loadedPhotoIds.value.has(photoId)
+}
+
+function markPhotoLoaded(photoId: number) {
+  loadedPhotoIds.value = new Set(loadedPhotoIds.value).add(photoId)
+}
 
 function loadMorePhotos() {
   if (!hasMorePhotos.value) {
@@ -141,15 +150,23 @@ watch(hasMorePhotos, (hasMore) => {
         >
           <button
             type="button"
-            class="block aspect-[3/4] w-full overflow-hidden bg-blush text-left focus:outline-none focus:ring-2 focus:ring-peach"
+            class="relative block aspect-[3/4] w-full overflow-hidden bg-blush text-left focus:outline-none focus:ring-2 focus:ring-peach"
             @click="openPhoto(photo)"
           >
+            <span
+              class="photo-skeleton absolute inset-0 transition-opacity duration-500"
+              :class="isPhotoLoaded(photo.id) ? 'opacity-0' : 'opacity-100'"
+              aria-hidden="true"
+            />
             <img
               :src="photo.url"
               :alt="photo.alt"
               loading="lazy"
               decoding="async"
-              class="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+              class="relative h-full w-full object-cover transition duration-500 group-hover:scale-105"
+              :class="isPhotoLoaded(photo.id) ? 'opacity-100' : 'opacity-0'"
+              @load="markPhotoLoaded(photo.id)"
+              @error="markPhotoLoaded(photo.id)"
             />
           </button>
         </article>
@@ -193,6 +210,14 @@ watch(hasMorePhotos, (hasMore) => {
 </template>
 
 <style scoped>
+.photo-skeleton {
+  background:
+    linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.42) 48%, transparent 66%),
+    linear-gradient(180deg, #ffe8ec 0%, #fffdf9 100%);
+  background-size: 220% 100%, 100% 100%;
+  animation: photoSkeleton 1.6s ease-in-out infinite;
+}
+
 .lightbox-enter-active,
 .lightbox-leave-active {
   transition: opacity 360ms ease;
@@ -220,5 +245,15 @@ watch(hasMorePhotos, (hasMore) => {
 .lightbox-leave-to .lightbox-close {
   opacity: 0;
   transform: translateY(-6px) scale(0.92);
+}
+
+@keyframes photoSkeleton {
+  from {
+    background-position: 160% 0, 0 0;
+  }
+
+  to {
+    background-position: -60% 0, 0 0;
+  }
 }
 </style>
