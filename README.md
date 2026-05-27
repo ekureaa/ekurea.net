@@ -47,6 +47,8 @@ VITE_MEDIA_BASE_URL=
 
 Cloudflare R2 の S3 互換 API を使うため、endpoint は未指定なら `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` を使います。R2 の custom domain は本番配信用に `VITE_MEDIA_BASE_URL` と同じホストへ接続してください。
 
+デプロイ先のビルド環境にも `VITE_MEDIA_BASE_URL` を設定します。
+
 ```sh
 npm run photos:upload
 ```
