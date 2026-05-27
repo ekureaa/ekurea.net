@@ -5,46 +5,74 @@ import photosData from '@/data/photos.json'
 
 type PhotoData = {
   id: number
-  image: string
+  key?: string
+  image?: string
+  thumb?: string
+  large?: string
   alt: string
   date?: string
 }
 
-const localPhotoModules = import.meta.glob<string>('../assets/photos/generated/*', {
-  eager: true,
-  import: 'default',
-  query: '?url',
-})
+const mediaBaseUrl = (import.meta.env.VITE_MEDIA_BASE_URL || '').replace(/\/+$/, '')
 
-const localPhotos = Object.fromEntries(
-  Object.entries(localPhotoModules).map(([path, url]) => [
-    path.replace(/^.*\/assets\/photos\//, ''),
-    url,
-  ]),
-)
-
-function resolvePhotoUrl(image: string) {
+function isAbsoluteUrl(image: string) {
   if (image.startsWith('http') || image.startsWith('/')) {
-    return image
+    return true
   }
 
-  return localPhotos[image] ?? ''
+  return false
 }
 
-function resolveLargePhotoUrl(image: string) {
-  if (image.startsWith('http') || image.startsWith('/')) {
+function resolveAssetUrl(image?: string) {
+  if (!image) {
+    return ''
+  }
+
+  if (isAbsoluteUrl(image)) {
     return image
   }
 
-  const largeImage = image.replace(/-thumb(\.[a-z0-9]+)$/i, '-large$1')
+  return ''
+}
 
-  return localPhotos[largeImage] ?? localPhotos[image] ?? ''
+function resolvePhotoUrl(photo: PhotoData) {
+  if (photo.thumb) {
+    return resolveAssetUrl(photo.thumb)
+  }
+
+  if (photo.key && mediaBaseUrl) {
+    return `${mediaBaseUrl}/${photo.key}-thumb.webp`
+  }
+
+  return resolveAssetUrl(photo.image)
+}
+
+function resolveLargePhotoUrl(photo: PhotoData) {
+  if (photo.large) {
+    return resolveAssetUrl(photo.large)
+  }
+
+  if (photo.key && mediaBaseUrl) {
+    return `${mediaBaseUrl}/${photo.key}-large.webp`
+  }
+
+  const image = photo.image
+
+  if (!image) {
+    return ''
+  }
+
+  if (isAbsoluteUrl(image)) {
+    return image
+  }
+
+  return ''
 }
 
 const photos = (photosData as PhotoData[]).map((photo) => ({
   ...photo,
-  url: resolvePhotoUrl(photo.image),
-  largeUrl: resolveLargePhotoUrl(photo.image),
+  url: resolvePhotoUrl(photo),
+  largeUrl: resolveLargePhotoUrl(photo),
 }))
 
 type Photo = (typeof photos)[number]

@@ -123,6 +123,7 @@ async function buildPhoto(inputPath, filename) {
   }
 
   return {
+    key: `photos/${safeName}`,
     image: `generated/${safeName}-thumb.webp`,
     alt: createAltText(filename) || safeName,
     date: extractDate(filename),
@@ -158,6 +159,7 @@ const newPhotos = builtPhotos
   .filter((photo) => !existingImages.has(photo.image))
   .map((photo) => ({
     id: 0,
+    key: photo.key,
     image: photo.image,
     alt: photo.alt,
     ...(photo.date ? { date: photo.date } : {}),
