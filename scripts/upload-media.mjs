@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { HeadObjectCommand, NotFound, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(__dirname, '..')
@@ -112,6 +112,26 @@ const updatedPhotos = photos.map((photo) => ({
 }))
 
 let uploadedCount = 0
+let skippedCount = 0
+
+async function objectExists(bucket, key) {
+  try {
+    await s3.send(
+      new HeadObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      }),
+    )
+
+    return true
+  } catch (error) {
+    if (error instanceof NotFound || error?.$metadata?.httpStatusCode === 404) {
+      return false
+    }
+
+    throw error
+  }
+}
 
 for (const photo of updatedPhotos) {
   if (!photo.key) {
@@ -129,6 +149,12 @@ for (const photo of updatedPhotos) {
     if (dryRun) {
       console.log(`Would upload ${filePath.replace(`${projectRoot}/`, '')} -> ${objectKey}`)
     } else {
+      if (await objectExists(bucket, objectKey)) {
+        skippedCount += 1
+        console.log(`Skipped ${objectKey}: already exists`)
+        continue
+      }
+
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -150,4 +176,7 @@ if (!dryRun) {
   await writePhotosJson(updatedPhotos)
 }
 
-console.log(`${dryRun ? 'Checked' : 'Uploaded'} ${uploadedCount} objects for R2 bucket ${bucket}.`)
+console.log(
+  `${dryRun ? 'Checked' : 'Uploaded'} ${uploadedCount} objects for R2 bucket ${bucket}.` +
+    (dryRun ? '' : ` Skipped ${skippedCount} existing objects.`),
+)
