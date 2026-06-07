@@ -64,3 +64,5 @@ npm run photos:upload -- --dry-run
 ```sh
 npm run photos:publish
 ```
+
+`photos:publish` はアップロード済みファイルをローカル記録からスキップします。

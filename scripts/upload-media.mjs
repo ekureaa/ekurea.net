@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { HeadObjectCommand, NotFound, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(__dirname, '..')
 const generatedPhotosDir = path.join(projectRoot, 'src/assets/photos/generated')
 const photosJsonPath = path.join(projectRoot, 'src/data/photos.json')
+const uploadManifestPath = path.join(projectRoot, '.cache/uploaded-media.json')
 
 const contentTypes = new Map([
   ['.avif', 'image/avif'],
@@ -81,10 +82,41 @@ async function writePhotosJson(photos) {
   await writeFile(photosJsonPath, `${JSON.stringify(photos, null, 2)}\n`)
 }
 
+async function readUploadManifest() {
+  try {
+    return JSON.parse(await readFile(uploadManifestPath, 'utf8'))
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return {
+        version: 1,
+        buckets: {},
+      }
+    }
+
+    throw error
+  }
+}
+
+async function writeUploadManifest(manifest) {
+  await mkdir(path.dirname(uploadManifestPath), { recursive: true })
+  await writeFile(uploadManifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+}
+
+function getBucketManifest(manifest, bucket) {
+  if (!manifest.buckets[bucket]) {
+    manifest.buckets[bucket] = {
+      objectKeys: [],
+    }
+  }
+
+  return manifest.buckets[bucket]
+}
+
 await loadEnvFile('.env.local')
 await loadEnvFile('.env')
 
 const dryRun = process.argv.includes('--dry-run')
+const skipUploaded = process.argv.includes('--skip-uploaded')
 const bucket = dryRun ? process.env.R2_BUCKET_NAME || '(dry-run bucket)' : requireEnv('R2_BUCKET_NAME')
 let s3 = null
 
@@ -110,9 +142,13 @@ const updatedPhotos = photos.map((photo) => ({
   ...photo,
   key: photo.key || photoKeyFromImage(photo.image || photo.thumb),
 }))
+const uploadManifest = await readUploadManifest()
+const bucketManifest = getBucketManifest(uploadManifest, bucket)
+const uploadedObjectKeys = new Set(bucketManifest.objectKeys)
 
 let uploadedCount = 0
 let skippedCount = 0
+let localSkippedCount = 0
 
 async function objectExists(bucket, key) {
   try {
@@ -143,17 +179,26 @@ for (const photo of updatedPhotos) {
     const filename = `${path.basename(photo.key)}-${variant}.webp`
     const filePath = path.join(generatedPhotosDir, filename)
     const objectKey = getVariantObjectKey(photo.key, filename)
-    const body = await readFile(filePath)
     const contentType = contentTypes.get(path.extname(filename).toLowerCase()) || 'application/octet-stream'
 
     if (dryRun) {
       console.log(`Would upload ${filePath.replace(`${projectRoot}/`, '')} -> ${objectKey}`)
     } else {
+      if (skipUploaded && uploadedObjectKeys.has(objectKey)) {
+        skippedCount += 1
+        localSkippedCount += 1
+        console.log(`Skipped ${objectKey}: recorded as uploaded`)
+        continue
+      }
+
       if (await objectExists(bucket, objectKey)) {
         skippedCount += 1
+        uploadedObjectKeys.add(objectKey)
         console.log(`Skipped ${objectKey}: already exists`)
         continue
       }
+
+      const body = await readFile(filePath)
 
       await s3.send(
         new PutObjectCommand({
@@ -165,6 +210,7 @@ for (const photo of updatedPhotos) {
         }),
       )
 
+      uploadedObjectKeys.add(objectKey)
       console.log(`Uploaded ${filePath.replace(`${projectRoot}/`, '')} -> ${objectKey}`)
     }
 
@@ -173,10 +219,12 @@ for (const photo of updatedPhotos) {
 }
 
 if (!dryRun) {
+  bucketManifest.objectKeys = [...uploadedObjectKeys].sort()
   await writePhotosJson(updatedPhotos)
+  await writeUploadManifest(uploadManifest)
 }
 
 console.log(
   `${dryRun ? 'Checked' : 'Uploaded'} ${uploadedCount} objects for R2 bucket ${bucket}.` +
-    (dryRun ? '' : ` Skipped ${skippedCount} existing objects.`),
+    (dryRun ? '' : ` Skipped ${skippedCount} objects (${localSkippedCount} from local record).`),
 )

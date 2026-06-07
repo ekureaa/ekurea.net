@@ -9,7 +9,7 @@
     "preview": "npm run build && wrangler dev",
     "photos:build": "node scripts/build-photos.mjs",
     "photos:upload": "node scripts/upload-media.mjs",
-    "photos:publish": "npm run photos:build && npm run photos:upload",
+    "photos:publish": "npm run photos:build && npm run photos:upload -- --skip-uploaded",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {

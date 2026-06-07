@@ -1,5 +1,6 @@
 dist
 node_modules
+.cache
 src/assets/photos/originals
 src/assets/photos/generated
 
