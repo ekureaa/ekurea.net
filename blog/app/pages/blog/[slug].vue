@@ -56,6 +56,8 @@ useSeoMeta({
   articlePublishedTime: () => post.value?.date,
   articleModifiedTime: () => post.value?.updated || post.value?.date,
   twitterCard: () => imageUrl.value ? 'summary_large_image' : 'summary',
+  twitterTitle: () => post.value?.title,
+  twitterDescription: () => post.value?.description,
   twitterImage: imageUrl,
   twitterImageAlt: () => post.value?.image?.alt,
 })
