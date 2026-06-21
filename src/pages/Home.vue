@@ -5,6 +5,7 @@ import homeImage from '@/assets/home.webp'
 const navLinks = [
   { to: '/about', label: 'About' },
   { to: '/photo', label: 'Photo' },
+  { href: 'https://blog.ekurea.net', label: 'Blog' },
   { to: '/links', label: 'Links' },
 ]
 </script>
@@ -19,19 +20,29 @@ const navLinks = [
     />
 
     <section class="home-copy relative z-10 flex min-h-dvh flex-col px-6 py-8 text-white sm:px-10 sm:py-10">
-      <div class="title-fade-up mt-auto max-w-3xl pb-44 sm:pb-52">
+      <div class="title-fade-up mt-auto max-w-3xl pb-64 sm:pb-80">
         <h1 class="text-6xl font-medium leading-tight sm:text-8xl">ekurea.net</h1>
       </div>
 
       <nav class="absolute bottom-8 left-6 flex flex-col gap-4 sm:left-10">
-        <RouterLink
-          v-for="link in navLinks"
-          :key="link.to"
-          :to="link.to"
-          class="link-fade-up w-fit text-4xl font-normal leading-none transition hover:opacity-75 focus:outline-none sm:text-5xl"
-        >
-          {{ link.label }}
-        </RouterLink>
+        <template v-for="link in navLinks" :key="link.to || link.href">
+          <RouterLink
+            v-if="link.to"
+            :to="link.to"
+            class="link-fade-up w-fit text-4xl font-normal leading-none transition hover:opacity-75 focus:outline-none sm:text-5xl"
+          >
+            {{ link.label }}
+          </RouterLink>
+          <a
+            v-else-if="link.href"
+            :href="link.href"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="link-fade-up w-fit text-4xl font-normal leading-none transition hover:opacity-75 focus:outline-none sm:text-5xl"
+          >
+            {{ link.label }}
+          </a>
+        </template>
       </nav>
 
       <div class="icon-fade absolute bottom-5 right-5 grid size-24 place-items-center rounded-full bg-white/90 p-4 shadow-sm sm:bottom-8 sm:right-8 sm:size-32 sm:p-5">

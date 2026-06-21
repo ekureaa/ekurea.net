@@ -10,6 +10,8 @@
     "photos:build": "node scripts/build-photos.mjs",
     "photos:upload": "node scripts/upload-media.mjs",
     "photos:publish": "npm run photos:build && npm run photos:upload -- --skip-uploaded",
+    "blog:images:upload": "node scripts/upload-blog-images.mjs",
+    "blog:publish": "npm run blog:images:upload && npm --prefix blog run generate:local",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {

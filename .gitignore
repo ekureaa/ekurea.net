@@ -1,6 +1,14 @@
 dist
 node_modules
 .cache
+.data
+.nuxt
+.output
+blog/assets/posts/**
+!blog/assets/posts/thumbnails/
+!blog/assets/posts/content/
+!blog/assets/posts/thumbnails/.gitkeep
+!blog/assets/posts/content/.gitkeep
 src/assets/photos/originals
 src/assets/photos/generated
 
