@@ -36,8 +36,6 @@ const navLinks = [
           <a
             v-else-if="link.href"
             :href="link.href"
-            target="_blank"
-            rel="noopener noreferrer"
             class="link-fade-up w-fit text-4xl font-normal leading-none transition hover:opacity-75 focus:outline-none sm:text-5xl"
           >
             {{ link.label }}
