@@ -64,4 +64,4 @@ Cloudflare Pages では次のように設定します。
 
 - Root directory: `blog`
 - Build command: `npm run generate`
-- Build output directory: `.output/public`
+- Build output directory: `dist`
