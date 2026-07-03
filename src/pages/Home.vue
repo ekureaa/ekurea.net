@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import eclairImage from '@/assets/eclair.png'
 import homeImage from '@/assets/home.webp'
 
@@ -8,18 +9,33 @@ const navLinks = [
   { href: 'https://blog.ekurea.net', label: 'Blog' },
   { to: '/links', label: 'Links' },
 ]
+
+const isBackgroundReady = ref(false)
+
+function revealHome() {
+  isBackgroundReady.value = true
+}
 </script>
 
 <template>
-  <main class="relative min-h-dvh select-none overflow-hidden bg-milk">
+  <main
+    class="relative min-h-dvh select-none overflow-hidden bg-milk"
+    :aria-busy="!isBackgroundReady"
+  >
     <img
       :src="homeImage"
       alt="ekurea.net home background"
       draggable="false"
-      class="photo-fade absolute inset-0 h-full w-full object-cover"
+      class="home-photo absolute inset-0 h-full w-full object-cover"
+      :class="{ 'home-photo-ready': isBackgroundReady }"
+      @load="revealHome"
+      @error="revealHome"
     />
 
-    <section class="home-copy relative z-10 flex min-h-dvh flex-col px-6 py-8 text-white sm:px-10 sm:py-10">
+    <section
+      class="home-copy relative z-10 flex min-h-dvh flex-col px-6 py-8 text-white sm:px-10 sm:py-10"
+      :class="{ 'home-ready': isBackgroundReady }"
+    >
       <div class="title-fade-up mt-auto max-w-3xl pb-64 sm:pb-80">
         <h1 class="text-6xl font-medium leading-tight sm:text-8xl">ekurea.net</h1>
       </div>
@@ -56,8 +72,17 @@ const navLinks = [
 </template>
 
 <style scoped>
-.photo-fade {
-  animation: photoFadeIn 2.4s ease-out both;
+.home-photo {
+  opacity: 0;
+  transform: scale(1.015);
+  transition:
+    opacity 1.2s ease,
+    transform 1.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.home-photo-ready {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .title-fade-up {
@@ -72,19 +97,15 @@ const navLinks = [
   animation: iconFadeIn 1.4s ease-out 1.15s both;
 }
 
+.home-copy:not(.home-ready) .title-fade-up,
+.home-copy:not(.home-ready) .link-fade-up,
+.home-copy:not(.home-ready) .icon-fade {
+  animation-play-state: paused;
+}
+
 @media (orientation: portrait) {
   .home-copy {
     color: #4b4646;
-  }
-}
-
-@keyframes photoFadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
   }
 }
 
@@ -107,6 +128,19 @@ const navLinks = [
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-photo {
+    transition-duration: 1ms;
+  }
+
+  .title-fade-up,
+  .link-fade-up,
+  .icon-fade {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
   }
 }
 </style>
