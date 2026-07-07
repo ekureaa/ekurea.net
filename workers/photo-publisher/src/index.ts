@@ -36,6 +36,37 @@ type PublishResult = {
 
 const photosJsonKey = 'photos/photos.json'
 
+function logInfo(event: string, details: Record<string, unknown>) {
+  console.log(JSON.stringify({ event, ...details }))
+}
+
+function logWarn(event: string, details: Record<string, unknown>) {
+  console.warn(JSON.stringify({ event, ...details }))
+}
+
+function logError(event: string, details: Record<string, unknown>) {
+  console.error(JSON.stringify({ event, ...details }))
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error'
+}
+
+function redactPhotoSourceToken(value: string) {
+  return value.replace(/\/source\/[^/]+\/(\d{4}-\d{2}-\d{2}\.png)/g, '/source/[redacted]/$1')
+}
+
+function getResponseLog(response: Response) {
+  return {
+    status: response.status,
+    ok: response.ok,
+    contentType: response.headers.get('content-type'),
+    contentLength: response.headers.get('content-length'),
+    cfRay: response.headers.get('cf-ray'),
+    cfCacheStatus: response.headers.get('cf-cache-status'),
+  }
+}
+
 function requireEnv(env: Env, name: keyof Env) {
   const value = env[name]
 
@@ -108,6 +139,11 @@ async function fetchOriginalPhoto(env: Env, date: string) {
   const username = requireEnv(env, 'NEXTCLOUD_USERNAME')
   const appPassword = requireEnv(env, 'NEXTCLOUD_APP_PASSWORD')
   const sourceUrl = createNextcloudUrl(env, date)
+  logInfo('nextcloud_fetch_started', {
+    date,
+    sourceUrl,
+  })
+
   const response = await fetch(sourceUrl, {
     headers: {
       Accept: 'image/png,image/*',
@@ -116,38 +152,92 @@ async function fetchOriginalPhoto(env: Env, date: string) {
   })
 
   if (response.status === 404) {
+    logWarn('nextcloud_fetch_not_found', {
+      date,
+      sourceUrl,
+      ...getResponseLog(response),
+    })
     return null
   }
 
   if (!response.ok || !response.body) {
+    logError('nextcloud_fetch_failed', {
+      date,
+      sourceUrl,
+      hasBody: Boolean(response.body),
+      ...getResponseLog(response),
+    })
     throw new Error(`Nextcloud fetch failed for ${date}.png: ${response.status}`)
   }
+
+  logInfo('nextcloud_fetch_succeeded', {
+    date,
+    sourceUrl,
+    ...getResponseLog(response),
+  })
 
   return response
 }
 
 async function fetchTransformedImage(env: Env, sourceUrl: string, variant: ImageVariant) {
-  const response = await fetch(createTransformUrl(env, sourceUrl, variant), {
+  const transformUrl = createTransformUrl(env, sourceUrl, variant)
+  const redactedSourceUrl = redactPhotoSourceToken(sourceUrl)
+  const redactedTransformUrl = redactPhotoSourceToken(transformUrl)
+
+  logInfo('image_transform_started', {
+    variant,
+    sourceUrl: redactedSourceUrl,
+    transformUrl: redactedTransformUrl,
+  })
+
+  const response = await fetch(transformUrl, {
     headers: {
       Accept: 'image/webp',
     },
   })
 
   if (response.status === 404) {
+    logWarn('image_transform_not_found', {
+      variant,
+      sourceUrl: redactedSourceUrl,
+      transformUrl: redactedTransformUrl,
+      ...getResponseLog(response),
+    })
     return null
   }
 
   if (!response.ok || !response.body) {
+    logError('image_transform_failed', {
+      variant,
+      sourceUrl: redactedSourceUrl,
+      transformUrl: redactedTransformUrl,
+      hasBody: Boolean(response.body),
+      ...getResponseLog(response),
+    })
     throw new Error(`Image transform failed for ${variant.key}: ${response.status}`)
   }
 
   const contentType = response.headers.get('content-type') || ''
 
   if (!contentType.toLowerCase().includes('image/webp')) {
+    logError('image_transform_unexpected_content_type', {
+      variant,
+      sourceUrl: redactedSourceUrl,
+      transformUrl: redactedTransformUrl,
+      expectedContentType: 'image/webp',
+      ...getResponseLog(response),
+    })
     throw new Error(
       `Image transform did not produce WebP for ${variant.key}. Received content-type: ${contentType || 'unknown'}`,
     )
   }
+
+  logInfo('image_transform_succeeded', {
+    variant,
+    sourceUrl: redactedSourceUrl,
+    transformUrl: redactedTransformUrl,
+    ...getResponseLog(response),
+  })
 
   return response
 }
@@ -226,10 +316,21 @@ async function publishDailyPhoto(
   const thumbKey = `photos/${date}-thumb.webp`
 
   requireEnv(env, 'MEDIA_BASE_URL')
+  logInfo('photo_publish_started', {
+    date,
+    trigger: controller ? 'cron' : 'manual',
+    largeKey,
+    thumbKey,
+    scheduledTime: controller?.scheduledTime,
+  })
 
   if (await env.MEDIA_BUCKET.head(largeKey)) {
     const message = `${largeKey} already exists. Skipped.`
-    console.log(message)
+    logInfo('photo_publish_skipped_existing', {
+      date,
+      largeKey,
+      message,
+    })
     return {
       date,
       status: 'skipped',
@@ -247,7 +348,11 @@ async function publishDailyPhoto(
 
   if (!thumb) {
     const message = `${date}.png was not found in Nextcloud. Skipped.`
-    console.log(message)
+    logWarn('photo_publish_skipped_not_found', {
+      date,
+      sourceUrl: redactPhotoSourceToken(sourceUrl),
+      message,
+    })
     return {
       date,
       status: 'not-found',
@@ -260,6 +365,11 @@ async function publishDailyPhoto(
       contentType: 'image/webp',
       cacheControl: 'public, max-age=31536000, immutable',
     },
+  })
+  logInfo('r2_put_succeeded', {
+    date,
+    key: thumbKey,
+    contentType: 'image/webp',
   })
 
   const large = await fetchTransformedImage(env, sourceUrl, {
@@ -278,6 +388,11 @@ async function publishDailyPhoto(
       cacheControl: 'public, max-age=31536000, immutable',
     },
   })
+  logInfo('r2_put_succeeded', {
+    date,
+    key: largeKey,
+    contentType: 'image/webp',
+  })
 
   const photos = await readPhotosJson(env.MEDIA_BUCKET)
   const nextPhotos = upsertPhoto(photos, {
@@ -290,7 +405,12 @@ async function publishDailyPhoto(
 
   await writePhotosJson(env.MEDIA_BUCKET, nextPhotos)
   const message = `Published ${date} to R2 and updated ${photosJsonKey}.`
-  console.log(message)
+  logInfo('photo_publish_succeeded', {
+    date,
+    photosJsonKey,
+    totalPhotos: nextPhotos.length,
+    message,
+  })
   return {
     date,
     status: 'published',
@@ -320,7 +440,17 @@ function authorizeSourceToken(token: string, env: Env) {
 
 export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(publishDailyPhoto(env, controller))
+    ctx.waitUntil(
+      publishDailyPhoto(env, controller).catch((error) => {
+        logError('photo_publish_failed', {
+          date: getTokyoDate(controller),
+          trigger: 'cron',
+          scheduledTime: controller.scheduledTime,
+          message: getErrorMessage(error),
+        })
+        throw error
+      }),
+    )
   },
 
   async fetch(request: Request, env: Env) {
@@ -342,6 +472,11 @@ export default {
       try {
         result = await publishDailyPhoto(env, undefined, date || undefined, request)
       } catch (error) {
+        logError('photo_publish_failed', {
+          date: date || getTokyoDate(),
+          trigger: 'manual',
+          message: getErrorMessage(error),
+        })
         return new Response(
           `${JSON.stringify(
             {
