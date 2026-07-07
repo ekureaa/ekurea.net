@@ -205,21 +205,14 @@ watch(hasMorePhotos, (hasMore) => {
       </header>
 
       <p
-        v-if="isLoadingPhotos"
-        class="mt-10 text-sm text-ink-soft"
-      >
-        Loading photos...
-      </p>
-
-      <p
-        v-else-if="photosError"
+        v-if="!isLoadingPhotos && photosError"
         class="mt-10 text-sm text-ink-soft"
       >
         {{ photosError }}
       </p>
 
       <section
-        v-else
+        v-else-if="!isLoadingPhotos"
         class="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
       >
         <article
