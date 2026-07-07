@@ -1,0 +1,30 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "ekurea-photo-publisher",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-07-07",
+	"keep_vars": true,
+	"observability": {
+		"enabled": true
+	},
+	"triggers": {
+		// 06:55 JST. Cloudflare Cron is configured in UTC.
+		"crons": [
+			"55 21 * * *"
+		]
+	},
+	"r2_buckets": [
+		{
+			"binding": "MEDIA_BUCKET",
+			"bucket_name": "media-ekurea-net"
+		}
+	],
+	"vars": {
+		"MEDIA_BASE_URL": "https://media.ekurea.net",
+		"NEXTCLOUD_BASE_URL": "https://nc.ekurea.net",
+		"NEXTCLOUD_DAILY_DIR": "winsync/vrchat/photos/_Unity/Ohatsui",
+		"WORKER_BASE_URL": "https://ekurea-photo-publisher.heppy-main.workers.dev",
+		"PHOTO_SOURCE_BASE_URL": "https://photo-source.ekurea.net",
+		"IMAGE_TRANSFORM_BASE_URL": "https://ekurea.net"
+	}
+}

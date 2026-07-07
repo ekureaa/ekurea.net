@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowLeft, X } from '@lucide/vue'
-import photosData from '@/data/photos.json'
 
 type PhotoData = {
-  id: number
+  id?: number
   key?: string
   image?: string
   thumb?: string
   large?: string
-  alt: string
+  alt?: string
   date?: string
 }
 
 const mediaBaseUrl = (import.meta.env.VITE_MEDIA_BASE_URL || '').replace(/\/+$/, '')
+const photosJsonUrl = mediaBaseUrl ? `${mediaBaseUrl}/photos/photos.json` : ''
 
 function isAbsoluteUrl(image: string) {
   if (image.startsWith('http') || image.startsWith('/')) {
@@ -30,6 +30,10 @@ function resolveAssetUrl(image?: string) {
 
   if (isAbsoluteUrl(image)) {
     return image
+  }
+
+  if (mediaBaseUrl) {
+    return `${mediaBaseUrl}/${image.replace(/^\/+/, '')}`
   }
 
   return ''
@@ -69,22 +73,29 @@ function resolveLargePhotoUrl(photo: PhotoData) {
   return ''
 }
 
-const photos = (photosData as PhotoData[]).map((photo) => ({
-  ...photo,
-  url: resolvePhotoUrl(photo),
-  largeUrl: resolveLargePhotoUrl(photo),
-}))
+function normalizePhoto(photo: PhotoData, index: number) {
+  return {
+    ...photo,
+    id: photo.id || index + 1,
+    alt: photo.alt || photo.date || `Photo ${index + 1}`,
+    url: resolvePhotoUrl(photo),
+    largeUrl: resolveLargePhotoUrl(photo),
+  }
+}
 
-type Photo = (typeof photos)[number]
+type Photo = ReturnType<typeof normalizePhoto>
 
 const photosPerPage = 24
+const photos = ref<Photo[]>([])
+const isLoadingPhotos = ref(true)
+const photosError = ref('')
 const selectedPhoto = ref<Photo | null>(null)
-const visibleCount = ref(Math.min(photosPerPage, photos.length))
+const visibleCount = ref(0)
 const loadMoreTrigger = ref<HTMLElement | null>(null)
 const loadedPhotoIds = ref(new Set<number>())
 const selectedPhotoUrl = computed(() => selectedPhoto.value?.largeUrl || selectedPhoto.value?.url || '')
-const visiblePhotos = computed(() => photos.slice(0, visibleCount.value))
-const hasMorePhotos = computed(() => visibleCount.value < photos.length)
+const visiblePhotos = computed(() => photos.value.slice(0, visibleCount.value))
+const hasMorePhotos = computed(() => visibleCount.value < photos.value.length)
 let loadMoreObserver: IntersectionObserver | null = null
 
 function isPhotoLoaded(photoId: number) {
@@ -100,7 +111,7 @@ function loadMorePhotos() {
     return
   }
 
-  visibleCount.value = Math.min(visibleCount.value + photosPerPage, photos.length)
+  visibleCount.value = Math.min(visibleCount.value + photosPerPage, photos.value.length)
 }
 
 function openPhoto(photo: Photo) {
@@ -117,12 +128,41 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
+async function loadPhotos() {
+  if (!photosJsonUrl) {
+    photosError.value = 'Photo data is not configured.'
+    isLoadingPhotos.value = false
+    return
+  }
+
+  try {
+    const response = await fetch(photosJsonUrl, {
+      headers: {
+        Accept: 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to load photos.json: ${response.status}`)
+    }
+
+    const data = (await response.json()) as PhotoData[]
+    photos.value = data.map(normalizePhoto).filter((photo) => photo.url)
+    visibleCount.value = Math.min(photosPerPage, photos.value.length)
+  } catch (error) {
+    photosError.value = error instanceof Error ? error.message : 'Failed to load photos.'
+  } finally {
+    isLoadingPhotos.value = false
+  }
+}
+
 watch(selectedPhoto, (photo) => {
   document.body.style.overflow = photo ? 'hidden' : ''
 })
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
+  void loadPhotos()
 
   if (!loadMoreTrigger.value) {
     return
@@ -170,7 +210,24 @@ watch(hasMorePhotos, (hasMore) => {
         <h1 class="text-4xl font-medium leading-tight text-ink sm:text-5xl">Photo</h1>
       </header>
 
-      <section class="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <p
+        v-if="isLoadingPhotos"
+        class="mt-10 text-sm text-ink-soft"
+      >
+        Loading photos...
+      </p>
+
+      <p
+        v-else-if="photosError"
+        class="mt-10 text-sm text-ink-soft"
+      >
+        {{ photosError }}
+      </p>
+
+      <section
+        v-else
+        class="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
+      >
         <article
           v-for="photo in visiblePhotos"
           :key="photo.id"
@@ -201,7 +258,7 @@ watch(hasMorePhotos, (hasMore) => {
       </section>
 
       <div
-        v-if="hasMorePhotos"
+        v-show="hasMorePhotos"
         ref="loadMoreTrigger"
         class="h-16"
         aria-hidden="true"

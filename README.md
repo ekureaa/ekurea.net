@@ -18,51 +18,76 @@ npm run dev
 
 ## Photo Data
 
-写真は `src/data/photos.json` で管理します。表示用の実ファイルは Cloudflare R2 にアップロードし、公開 URL は `VITE_MEDIA_BASE_URL` から組み立てます。
+Photoページは Cloudflare R2 上の `photos/photos.json` を読み込みます。公開 URL は `VITE_MEDIA_BASE_URL` から組み立てます。
 
-元画像は `src/assets/photos/originals/` に置き、次のコマンドで表示用 WebP に変換します。
-
-```sh
-npm run photos:build
-```
-
-変換後の画像は `src/assets/photos/generated/` に出力されます。
-
-- 一覧用: `写真名-thumb.webp` / 幅 900px / quality 78
-- 全画面用: `写真名-large.webp` / 幅 2560px / quality 82
-
-`src/data/photos.json` には自動で追記されます。同じ画像は重複追加されません。
-
-ファイル名が `2026-05-25.png` のような日付形式を含む場合、`date` も自動で入ります。
-
-R2 にアップロードするには `.env` に次の値を設定します。
+デプロイ先のビルド環境に次の値を設定します。
 
 ```sh
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=
 VITE_MEDIA_BASE_URL=
 ```
 
-Cloudflare R2 の S3 互換 API を使うため、endpoint は未指定なら `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` を使います。R2 の custom domain は本番配信用に `VITE_MEDIA_BASE_URL` と同じホストへ接続してください。
+`photos/photos.json` はブラウザから `fetch()` するため、R2バケットのCORSで `GET` を許可します。少なくとも本番サイトの origin とローカル確認用の origin を許可してください。
 
-デプロイ先のビルド環境にも `VITE_MEDIA_BASE_URL` を設定します。
+```json
+[
+  {
+    "AllowedOrigins": ["https://ekurea.net", "http://localhost:5173"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"]
+  }
+]
+```
+
+既存写真の初回移行や手動反映が必要な場合は、ローカルの `src/data/photos.json` と生成済みWebPをR2へアップロードできます。
 
 ```sh
 npm run photos:upload
 ```
 
-アップロード前に R2 へ送る object key だけ確認する場合:
+`photos:upload` は画像に加えて `photos/photos.json` もR2へアップロードします。
+
+## Photo Worker
+
+日々の写真追加は `workers/photo-publisher` の Cloudflare Worker で行います。Nextcloud の非公開WebDAVから当日分の `yyyy-mm-dd.png` を取得し、Cloudflare Image Transformations でWebP変換してR2に保存します。
+`large` は Cloudflare のWebP出力が安定する幅として 1920px、`thumb` は 900px で生成します。
+
+R2保存先:
 
 ```sh
-npm run photos:upload -- --dry-run
+photos/yyyy-mm-dd-large.webp
+photos/yyyy-mm-dd-thumb.webp
+photos/photos.json
 ```
 
-生成とアップロードをまとめて行う場合:
+Workerは2つ使います。
+
+- `workers/photo-publisher`: Cron実行、画像変換、R2更新
+- `workers/photo-source`: `cf.image` 用の変換元プロキシ
+
+Worker の Variables / Secrets:
 
 ```sh
-npm run photos:publish
+NEXTCLOUD_BASE_URL
+NEXTCLOUD_USERNAME
+NEXTCLOUD_APP_PASSWORD
+NEXTCLOUD_DAILY_DIR
+MEDIA_BASE_URL
+PHOTO_SOURCE_BASE_URL
+PHOTO_SOURCE_TOKEN
+SOURCE_ACCESS_TOKEN
+UPSTREAM_SOURCE_TOKEN
 ```
 
-`photos:publish` はアップロード済みファイルをローカル記録からスキップします。
+デプロイ:
+
+```sh
+npm run photos:source:deploy
+npm run photos:worker:deploy
+```
+
+ローカルでCronハンドラを確認する場合:
+
+```sh
+npm run photos:worker:dev
+curl "http://localhost:8787/cdn-cgi/handler/scheduled"
+```

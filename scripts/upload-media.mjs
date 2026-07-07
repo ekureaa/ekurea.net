@@ -8,6 +8,7 @@ const projectRoot = path.resolve(__dirname, '..')
 const generatedPhotosDir = path.join(projectRoot, 'src/assets/photos/generated')
 const photosJsonPath = path.join(projectRoot, 'src/data/photos.json')
 const uploadManifestPath = path.join(projectRoot, '.cache/uploaded-media.json')
+const remotePhotosJsonKey = 'photos/photos.json'
 
 const contentTypes = new Map([
   ['.avif', 'image/avif'],
@@ -218,9 +219,25 @@ for (const photo of updatedPhotos) {
   }
 }
 
+if (dryRun) {
+  console.log(`Would upload ${photosJsonPath.replace(`${projectRoot}/`, '')} -> ${remotePhotosJsonKey}`)
+}
+
 if (!dryRun) {
   bucketManifest.objectKeys = [...uploadedObjectKeys].sort()
   await writePhotosJson(updatedPhotos)
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: remotePhotosJsonKey,
+      Body: `${JSON.stringify(updatedPhotos, null, 2)}\n`,
+      ContentType: 'application/json; charset=utf-8',
+      CacheControl: 'public, max-age=60',
+    }),
+  )
+  console.log(`Uploaded ${photosJsonPath.replace(`${projectRoot}/`, '')} -> ${remotePhotosJsonKey}`)
+
   await writeUploadManifest(uploadManifest)
 }
 

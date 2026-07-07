@@ -1,0 +1,19 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "ekurea-photo-source",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-07",
+  "keep_vars": true,
+  "observability": {
+    "enabled": true
+  },
+  "routes": [
+    {
+      "pattern": "photo-source.ekurea.net",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "UPSTREAM_SOURCE_BASE_URL": "https://ekurea-photo-publisher.heppy-main.workers.dev"
+  }
+}
