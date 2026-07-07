@@ -12,6 +12,14 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     plugins: [vue(), tailwindcss(), cloudflare()],
+    server: {
+      proxy: {
+        '/photos/photos.json': {
+          target: env.VITE_MEDIA_BASE_URL || 'https://media.ekurea.net',
+          changeOrigin: true,
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': '/src',

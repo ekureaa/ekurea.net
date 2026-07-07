@@ -18,24 +18,12 @@ npm run dev
 
 ## Photo Data
 
-Photoページは Cloudflare R2 上の `photos/photos.json` を読み込みます。公開 URL は `VITE_MEDIA_BASE_URL` から組み立てます。
+Photoページは同一オリジンの `/photos/photos.json` を読み込みます。このパスは Worker / Pages Function で Cloudflare R2 上の `photos/photos.json` に中継します。画像URLは `VITE_MEDIA_BASE_URL` から組み立てます。
 
 デプロイ先のビルド環境に次の値を設定します。
 
 ```sh
 VITE_MEDIA_BASE_URL=
-```
-
-`photos/photos.json` はブラウザから `fetch()` するため、R2バケットのCORSで `GET` を許可します。少なくとも本番サイトの origin とローカル確認用の origin を許可してください。
-
-```json
-[
-  {
-    "AllowedOrigins": ["https://ekurea.net", "http://localhost:5173"],
-    "AllowedMethods": ["GET", "HEAD"],
-    "AllowedHeaders": ["*"]
-  }
-]
 ```
 
 既存写真の初回移行や手動反映が必要な場合は、ローカルの `src/data/photos.json` と生成済みWebPをR2へアップロードできます。

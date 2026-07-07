@@ -13,7 +13,7 @@ type PhotoData = {
 }
 
 const mediaBaseUrl = (import.meta.env.VITE_MEDIA_BASE_URL || '').replace(/\/+$/, '')
-const photosJsonUrl = mediaBaseUrl ? `${mediaBaseUrl}/photos/photos.json` : ''
+const photosJsonUrl = import.meta.env.VITE_PHOTOS_JSON_URL || '/photos/photos.json'
 
 function isAbsoluteUrl(image: string) {
   if (image.startsWith('http') || image.startsWith('/')) {
@@ -129,12 +129,6 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 async function loadPhotos() {
-  if (!photosJsonUrl) {
-    photosError.value = 'Photo data is not configured.'
-    isLoadingPhotos.value = false
-    return
-  }
-
   try {
     const response = await fetch(photosJsonUrl, {
       headers: {
