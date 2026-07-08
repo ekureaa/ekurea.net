@@ -24,7 +24,6 @@
 		"NEXTCLOUD_BASE_URL": "https://nc.ekurea.net",
 		"NEXTCLOUD_DAILY_DIR": "winsync/vrchat/photos/_Unity/Ohatsui",
 		"WORKER_BASE_URL": "https://ekurea-photo-publisher.heppy-main.workers.dev",
-		"PHOTO_SOURCE_BASE_URL": "https://photo-source.ekurea.net",
 		"IMAGE_TRANSFORM_BASE_URL": "https://ekurea.net"
 	}
 }

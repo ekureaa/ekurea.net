@@ -47,10 +47,7 @@ photos/yyyy-mm-dd-thumb.webp
 photos/photos.json
 ```
 
-Workerは2つ使います。
-
-- `workers/photo-publisher`: Cron実行、画像変換、R2更新
-- `workers/photo-source`: `cf.image` 用の変換元プロキシ
+Workerは `workers/photo-publisher` を使います。Cron実行、Nextcloudからの元画像取得、画像変換、R2更新を担当します。
 
 Worker の Variables / Secrets:
 
@@ -60,16 +57,13 @@ NEXTCLOUD_USERNAME
 NEXTCLOUD_APP_PASSWORD
 NEXTCLOUD_DAILY_DIR
 MEDIA_BASE_URL
-PHOTO_SOURCE_BASE_URL
+WORKER_BASE_URL
 PHOTO_SOURCE_TOKEN
-SOURCE_ACCESS_TOKEN
-UPSTREAM_SOURCE_TOKEN
 ```
 
 デプロイ:
 
 ```sh
-npm run photos:source:deploy
 npm run photos:worker:deploy
 ```
 

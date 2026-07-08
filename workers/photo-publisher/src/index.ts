@@ -7,7 +7,6 @@ type Env = {
   MEDIA_BASE_URL: string
   MANUAL_RUN_SECRET?: string
   WORKER_BASE_URL?: string
-  PHOTO_SOURCE_BASE_URL?: string
   PHOTO_SOURCE_TOKEN?: string
   IMAGE_TRANSFORM_BASE_URL?: string
 }
@@ -67,6 +66,14 @@ function getResponseLog(response: Response) {
   }
 }
 
+function getNextcloudLogDetails(env: Env, date: string) {
+  return {
+    date,
+    origin: new URL(requireEnv(env, 'NEXTCLOUD_BASE_URL')).origin,
+    filename: `${date}.png`,
+  }
+}
+
 function requireEnv(env: Env, name: keyof Env) {
   const value = env[name]
 
@@ -122,11 +129,7 @@ function createNextcloudUrl(env: Env, date: string) {
 }
 
 function createWorkerSourceUrl(env: Env, date: string, request?: Request) {
-  const baseUrl = (
-    env.PHOTO_SOURCE_BASE_URL ||
-    env.WORKER_BASE_URL ||
-    (request ? new URL(request.url).origin : '')
-  ).replace(/\/+$/, '')
+  const baseUrl = (env.WORKER_BASE_URL || (request ? new URL(request.url).origin : '')).replace(/\/+$/, '')
 
   if (!baseUrl) {
     throw new Error('Missing required environment variable: WORKER_BASE_URL')
@@ -139,9 +142,9 @@ async function fetchOriginalPhoto(env: Env, date: string) {
   const username = requireEnv(env, 'NEXTCLOUD_USERNAME')
   const appPassword = requireEnv(env, 'NEXTCLOUD_APP_PASSWORD')
   const sourceUrl = createNextcloudUrl(env, date)
+  const logDetails = getNextcloudLogDetails(env, date)
   logInfo('nextcloud_fetch_started', {
-    date,
-    sourceUrl,
+    ...logDetails,
   })
 
   const response = await fetch(sourceUrl, {
@@ -153,8 +156,7 @@ async function fetchOriginalPhoto(env: Env, date: string) {
 
   if (response.status === 404) {
     logWarn('nextcloud_fetch_not_found', {
-      date,
-      sourceUrl,
+      ...logDetails,
       ...getResponseLog(response),
     })
     return null
@@ -162,8 +164,7 @@ async function fetchOriginalPhoto(env: Env, date: string) {
 
   if (!response.ok || !response.body) {
     logError('nextcloud_fetch_failed', {
-      date,
-      sourceUrl,
+      ...logDetails,
       hasBody: Boolean(response.body),
       ...getResponseLog(response),
     })
@@ -171,8 +172,7 @@ async function fetchOriginalPhoto(env: Env, date: string) {
   }
 
   logInfo('nextcloud_fetch_succeeded', {
-    date,
-    sourceUrl,
+    ...logDetails,
     ...getResponseLog(response),
   })
 
@@ -429,7 +429,7 @@ function authorizeManualRun(request: Request, env: Env) {
 }
 
 function authorizeSourceToken(token: string, env: Env) {
-  const secrets = [env.MANUAL_RUN_SECRET, env.PHOTO_SOURCE_TOKEN].filter(Boolean)
+  const secrets = [env.PHOTO_SOURCE_TOKEN].filter(Boolean)
 
   if (secrets.length === 0) {
     return false
@@ -507,6 +507,15 @@ export default {
     const sourceWithTokenMatch = url.pathname.match(/^\/source\/([^/]+)\/(\d{4}-\d{2}-\d{2})\.png$/)
 
     if (sourceWithTokenMatch) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        return new Response('Method not allowed', {
+          status: 405,
+          headers: {
+            allow: 'GET, HEAD',
+          },
+        })
+      }
+
       const isAuthorized = authorizeSourceToken(decodeURIComponent(sourceWithTokenMatch[1]), env)
 
       if (!isAuthorized) {
