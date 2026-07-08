@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ArrowLeft, Gift, Mail } from '@lucide/vue'
-import { siKeybase, siVrchat, siX } from 'simple-icons'
+import { siGithub, siKeybase, siVrchat, siX } from 'simple-icons'
 
 const links = [
   {
@@ -16,16 +16,16 @@ const links = [
     brandIcon: siX,
   },
   {
-    name: 'X (sub)',
-    username: '@ekureaa_sub',
-    url: 'https://x.com/ekureaa_sub',
-    brandIcon: siX,
-  },
-  {
     name: 'Email',
     username: 'contact@ekurea.net',
     url: 'mailto:contact@ekurea.net',
     icon: Mail,
+  },
+  {
+    name: 'GitHub',
+    username: 'ekureaa',
+    url: 'https://github.com/ekureaa',
+    brandIcon: siGithub,
   },
   {
     name: 'Keybase',
