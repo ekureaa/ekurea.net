@@ -44,10 +44,13 @@ function isPageRequest(request: Request, pathname: string) {
     return true
   }
 
-  const accept = request.headers.get('accept') || ''
   const lastSegment = pathname.split('/').pop() || ''
+  if (lastSegment.includes('.')) {
+    return false
+  }
 
-  return accept.includes('text/html') || !lastSegment.includes('.')
+  const accept = request.headers.get('accept') || ''
+  return accept.includes('text/html') || accept === '' || accept === '*/*'
 }
 
 async function servePage(request: Request, env: Env, pathname: string) {
