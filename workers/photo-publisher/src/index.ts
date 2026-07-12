@@ -1,5 +1,6 @@
 type Env = {
   MEDIA_BUCKET: R2Bucket
+  SOURCE_BUCKET: R2Bucket
   NEXTCLOUD_BASE_URL: string
   NEXTCLOUD_USERNAME: string
   NEXTCLOUD_APP_PASSWORD: string
@@ -33,7 +34,25 @@ type PublishResult = {
   message: string
 }
 
+type RunTrigger = 'cron' | 'manual'
+type RunPhase = 'started' | 'completed' | 'failed'
+type RunStep = {
+  at: string
+  event: string
+  details?: Record<string, unknown>
+}
+type RunDiagnostics = {
+  runId: string
+  date: string
+  trigger: RunTrigger
+  startedAt: string
+  scheduledTime?: number
+  steps: RunStep[]
+}
+
 const photosJsonKey = 'photos/photos.json'
+const publisherStatusKey = 'photos/publisher-status.json'
+const transformRetryDelaysMs = [10_000, 30_000, 60_000]
 
 function logInfo(event: string, details: Record<string, unknown>) {
   console.log(JSON.stringify({ event, ...details }))
@@ -51,8 +70,23 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown error'
 }
 
+function createRunId() {
+  return crypto.randomUUID()
+}
+
+function sanitizeRunId(value: string | null) {
+  if (!value || !/^[a-zA-Z0-9-]{8,80}$/.test(value)) {
+    return ''
+  }
+
+  return value
+}
+
 function redactPhotoSourceToken(value: string) {
-  return value.replace(/\/source\/[^/]+\/(\d{4}-\d{2}-\d{2}\.png)/g, '/source/[redacted]/$1')
+  return value.replace(
+    /\/source\/[^/]+\/(\d{4}-\d{2}-\d{2})(?:\/[a-zA-Z0-9-]+)?\.png/g,
+    '/source/[redacted]/$1/[run-id].png',
+  )
 }
 
 function getResponseLog(response: Response) {
@@ -63,7 +97,33 @@ function getResponseLog(response: Response) {
     contentLength: response.headers.get('content-length'),
     cfRay: response.headers.get('cf-ray'),
     cfCacheStatus: response.headers.get('cf-cache-status'),
+    cfResized: response.headers.get('cf-resized'),
+    warning: response.headers.get('warning'),
   }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+function isRetryableTransformResponse(response: Response) {
+  if (response.status === 429 || response.status >= 500) {
+    return true
+  }
+
+  const resized = response.headers.get('cf-resized') || ''
+
+  return /\berr=(9504|9505|9510|9522|9529)\b/.test(resized)
+}
+
+function getOrigin(value: string) {
+  return new URL(value).origin
+}
+
+function getOptionalOrigin(value: string) {
+  return value ? getOrigin(value) : ''
 }
 
 function getNextcloudLogDetails(env: Env, date: string) {
@@ -128,14 +188,18 @@ function createNextcloudUrl(env: Env, date: string) {
   return `${baseUrl}/remote.php/dav/files/${encodePath(username)}/${encodePath(dailyDir)}/${date}.png`
 }
 
-function createWorkerSourceUrl(env: Env, date: string, request?: Request) {
+function createTemporarySourceKey(date: string, runId: string) {
+  return `photos/publisher-sources/${date}-${runId}.png`
+}
+
+function createWorkerSourceUrl(env: Env, date: string, runId: string, request?: Request) {
   const baseUrl = (env.WORKER_BASE_URL || (request ? new URL(request.url).origin : '')).replace(/\/+$/, '')
 
   if (!baseUrl) {
     throw new Error('Missing required environment variable: WORKER_BASE_URL')
   }
 
-  return `${baseUrl}/source/${encodeURIComponent(requireEnv(env, 'PHOTO_SOURCE_TOKEN'))}/${date}.png`
+  return `${baseUrl}/source/${encodeURIComponent(requireEnv(env, 'PHOTO_SOURCE_TOKEN'))}/${date}/${encodeURIComponent(runId)}.png`
 }
 
 async function fetchOriginalPhoto(env: Env, date: string) {
@@ -179,67 +243,141 @@ async function fetchOriginalPhoto(env: Env, date: string) {
   return response
 }
 
-async function fetchTransformedImage(env: Env, sourceUrl: string, variant: ImageVariant) {
+function getR2ObjectLog(object: R2Object) {
+  return {
+    size: object.size,
+    etag: object.etag,
+    uploaded: object.uploaded.toISOString(),
+    contentType: object.httpMetadata?.contentType || null,
+  }
+}
+
+async function fetchTransformedImage(
+  env: Env,
+  sourceUrl: string,
+  variant: ImageVariant,
+  run?: RunDiagnostics,
+) {
   const transformUrl = createTransformUrl(env, sourceUrl, variant)
   const redactedSourceUrl = redactPhotoSourceToken(sourceUrl)
   const redactedTransformUrl = redactPhotoSourceToken(transformUrl)
-
-  logInfo('image_transform_started', {
+  const details = {
     variant,
     sourceUrl: redactedSourceUrl,
+    sourceOrigin: getOrigin(sourceUrl),
     transformUrl: redactedTransformUrl,
-  })
+    transformOrigin: getOrigin(transformUrl),
+  }
+  const maxAttempts = transformRetryDelaysMs.length + 1
 
-  const response = await fetch(transformUrl, {
-    headers: {
-      Accept: 'image/webp',
-    },
-  })
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const startedAt = Date.now()
+    const attemptDetails = {
+      ...details,
+      attempt,
+      maxAttempts,
+    }
 
-  if (response.status === 404) {
-    logWarn('image_transform_not_found', {
-      variant,
-      sourceUrl: redactedSourceUrl,
-      transformUrl: redactedTransformUrl,
-      ...getResponseLog(response),
+    logInfo('image_transform_started', {
+      ...attemptDetails,
     })
-    return null
+    if (run) {
+      await recordRunStep(env, run, 'image_transform_started', attemptDetails)
+    }
+
+    const response = await fetch(transformUrl, {
+      headers: {
+        Accept: 'image/webp',
+      },
+    })
+
+    if (response.status === 404) {
+      const responseDetails = {
+        ...attemptDetails,
+        elapsedMs: Date.now() - startedAt,
+        response: getResponseLog(response),
+      }
+      logWarn('image_transform_not_found', {
+        ...responseDetails,
+      })
+      if (run) {
+        await recordRunStep(env, run, 'image_transform_not_found', responseDetails)
+      }
+      return null
+    }
+
+    if (!response.ok || !response.body) {
+      const retryable = isRetryableTransformResponse(response)
+      const retryDelayMs = retryable ? transformRetryDelaysMs[attempt - 1] : undefined
+      const responseDetails = {
+        ...attemptDetails,
+        elapsedMs: Date.now() - startedAt,
+        hasBody: Boolean(response.body),
+        retryable,
+        retryDelayMs,
+        response: getResponseLog(response),
+      }
+      logError('image_transform_failed', {
+        ...responseDetails,
+      })
+      if (run) {
+        await recordRunStep(env, run, 'image_transform_failed', responseDetails)
+      }
+
+      if (retryable && retryDelayMs) {
+        logWarn('image_transform_retry_scheduled', {
+          ...attemptDetails,
+          retryDelayMs,
+        })
+        if (run) {
+          await recordRunStep(env, run, 'image_transform_retry_scheduled', {
+            ...attemptDetails,
+            retryDelayMs,
+          })
+        }
+        await sleep(retryDelayMs)
+        continue
+      }
+
+      throw new Error(`Image transform failed for ${variant.key}: ${response.status}`)
+    }
+
+    const contentType = response.headers.get('content-type') || ''
+
+    if (!contentType.toLowerCase().includes('image/webp')) {
+      const responseDetails = {
+        ...attemptDetails,
+        elapsedMs: Date.now() - startedAt,
+        expectedContentType: 'image/webp',
+        response: getResponseLog(response),
+      }
+      logError('image_transform_unexpected_content_type', {
+        ...responseDetails,
+      })
+      if (run) {
+        await recordRunStep(env, run, 'image_transform_unexpected_content_type', responseDetails)
+      }
+      throw new Error(
+        `Image transform did not produce WebP for ${variant.key}. Received content-type: ${contentType || 'unknown'}`,
+      )
+    }
+
+    const responseDetails = {
+      ...attemptDetails,
+      elapsedMs: Date.now() - startedAt,
+      response: getResponseLog(response),
+    }
+    logInfo('image_transform_succeeded', {
+      ...responseDetails,
+    })
+    if (run) {
+      await recordRunStep(env, run, 'image_transform_succeeded', responseDetails)
+    }
+
+    return response
   }
 
-  if (!response.ok || !response.body) {
-    logError('image_transform_failed', {
-      variant,
-      sourceUrl: redactedSourceUrl,
-      transformUrl: redactedTransformUrl,
-      hasBody: Boolean(response.body),
-      ...getResponseLog(response),
-    })
-    throw new Error(`Image transform failed for ${variant.key}: ${response.status}`)
-  }
-
-  const contentType = response.headers.get('content-type') || ''
-
-  if (!contentType.toLowerCase().includes('image/webp')) {
-    logError('image_transform_unexpected_content_type', {
-      variant,
-      sourceUrl: redactedSourceUrl,
-      transformUrl: redactedTransformUrl,
-      expectedContentType: 'image/webp',
-      ...getResponseLog(response),
-    })
-    throw new Error(
-      `Image transform did not produce WebP for ${variant.key}. Received content-type: ${contentType || 'unknown'}`,
-    )
-  }
-
-  logInfo('image_transform_succeeded', {
-    variant,
-    sourceUrl: redactedSourceUrl,
-    transformUrl: redactedTransformUrl,
-    ...getResponseLog(response),
-  })
-
-  return response
+  throw new Error(`Image transform failed for ${variant.key}.`)
 }
 
 function createTransformUrl(env: Env, sourceUrl: string, variant: ImageVariant) {
@@ -305,17 +443,164 @@ async function writePhotosJson(bucket: R2Bucket, photos: PhotoRecord[]) {
   })
 }
 
+async function writePublisherStatus(
+  env: Env,
+  status: {
+    date: string
+    trigger: RunTrigger
+    phase: RunPhase
+    result?: PublishResult['status']
+    message?: string
+    scheduledTime?: number
+    runId?: string
+    startedAt?: string
+    steps?: RunStep[]
+  },
+) {
+  const body = `${JSON.stringify(
+    {
+      ...status,
+      updatedAt: new Date().toISOString(),
+    },
+    null,
+    2,
+  )}\n`
+  const runStatusKey = `photos/publisher-runs/${status.date}-${status.trigger}.json`
+  const metadata = {
+    httpMetadata: {
+      contentType: 'application/json; charset=utf-8',
+      cacheControl: 'public, max-age=60',
+    },
+  }
+
+  await Promise.all([
+    env.MEDIA_BUCKET.put(publisherStatusKey, body, metadata),
+    env.MEDIA_BUCKET.put(runStatusKey, body, metadata),
+  ])
+}
+
+async function safeWritePublisherStatus(
+  env: Env,
+  status: Parameters<typeof writePublisherStatus>[1],
+) {
+  try {
+    await writePublisherStatus(env, status)
+  } catch (error) {
+    logError('publisher_status_write_failed', {
+      date: status.date,
+      trigger: status.trigger,
+      phase: status.phase,
+      message: getErrorMessage(error),
+    })
+  }
+}
+
+function createRunDiagnostics(date: string, trigger: RunTrigger, scheduledTime?: number): RunDiagnostics {
+  return {
+    runId: createRunId(),
+    date,
+    trigger,
+    startedAt: new Date().toISOString(),
+    scheduledTime,
+    steps: [],
+  }
+}
+
+async function recordRunStep(
+  env: Env,
+  run: RunDiagnostics,
+  event: string,
+  details?: Record<string, unknown>,
+) {
+  run.steps.push({
+    at: new Date().toISOString(),
+    event,
+    details,
+  })
+
+  await safeWritePublisherStatus(env, {
+    date: run.date,
+    trigger: run.trigger,
+    phase: 'started',
+    scheduledTime: run.scheduledTime,
+    runId: run.runId,
+    startedAt: run.startedAt,
+    steps: run.steps,
+  })
+}
+
+async function writeSourceRequestStatus(
+  env: Env,
+  status: {
+    date: string
+    runId: string
+    phase: RunPhase
+    message?: string
+    response?: Record<string, unknown>
+  },
+) {
+  const body = `${JSON.stringify(
+    {
+      ...status,
+      updatedAt: new Date().toISOString(),
+    },
+    null,
+    2,
+  )}\n`
+
+  await env.MEDIA_BUCKET.put(`photos/publisher-source-runs/${status.date}-${status.runId}.json`, body, {
+    httpMetadata: {
+      contentType: 'application/json; charset=utf-8',
+      cacheControl: 'public, max-age=60',
+    },
+  })
+}
+
+async function safeWriteSourceRequestStatus(
+  env: Env,
+  status: Parameters<typeof writeSourceRequestStatus>[1],
+) {
+  try {
+    await writeSourceRequestStatus(env, status)
+  } catch (error) {
+    logError('source_request_status_write_failed', {
+      date: status.date,
+      runId: status.runId,
+      phase: status.phase,
+      message: getErrorMessage(error),
+    })
+  }
+}
+
 async function publishDailyPhoto(
   env: Env,
   controller?: ScheduledController,
   dateOverride?: string,
   request?: Request,
+  run?: RunDiagnostics,
 ): Promise<PublishResult> {
   const date = dateOverride || getTokyoDate(controller)
   const largeKey = `photos/${date}-large.webp`
   const thumbKey = `photos/${date}-thumb.webp`
 
   requireEnv(env, 'MEDIA_BASE_URL')
+  requireEnv(env, 'NEXTCLOUD_BASE_URL')
+  requireEnv(env, 'NEXTCLOUD_USERNAME')
+  requireEnv(env, 'NEXTCLOUD_APP_PASSWORD')
+  requireEnv(env, 'NEXTCLOUD_DAILY_DIR')
+  requireEnv(env, 'PHOTO_SOURCE_TOKEN')
+
+  if (run) {
+    await recordRunStep(env, run, 'publish_env_validated', {
+      mediaOrigin: getOrigin(requireEnv(env, 'MEDIA_BASE_URL')),
+      nextcloudOrigin: getOrigin(requireEnv(env, 'NEXTCLOUD_BASE_URL')),
+      workerOrigin: getOptionalOrigin(env.WORKER_BASE_URL || (request ? new URL(request.url).origin : '')),
+      transformOrigin: getOrigin(env.IMAGE_TRANSFORM_BASE_URL || 'https://ekurea.net'),
+      hasManualRunSecret: Boolean(env.MANUAL_RUN_SECRET),
+      hasPhotoSourceToken: Boolean(env.PHOTO_SOURCE_TOKEN),
+    })
+  }
+
   logInfo('photo_publish_started', {
     date,
     trigger: controller ? 'cron' : 'manual',
@@ -323,14 +608,45 @@ async function publishDailyPhoto(
     thumbKey,
     scheduledTime: controller?.scheduledTime,
   })
+  if (run) {
+    await recordRunStep(env, run, 'photo_publish_started', {
+      largeKey,
+      thumbKey,
+      scheduledTime: controller?.scheduledTime,
+    })
+  }
 
-  if (await env.MEDIA_BUCKET.head(largeKey)) {
+  if (run) {
+    await recordRunStep(env, run, 'r2_existing_check_started', {
+      key: largeKey,
+    })
+  }
+
+  const existingLarge = await env.MEDIA_BUCKET.head(largeKey)
+
+  if (run) {
+    await recordRunStep(env, run, 'r2_existing_check_completed', {
+      key: largeKey,
+      exists: Boolean(existingLarge),
+      size: existingLarge?.size,
+      etag: existingLarge?.etag,
+      uploaded: existingLarge?.uploaded?.toISOString(),
+    })
+  }
+
+  if (existingLarge) {
     const message = `${largeKey} already exists. Skipped.`
     logInfo('photo_publish_skipped_existing', {
       date,
       largeKey,
       message,
     })
+    if (run) {
+      await recordRunStep(env, run, 'photo_publish_skipped_existing', {
+        key: largeKey,
+        message,
+      })
+    }
     return {
       date,
       status: 'skipped',
@@ -338,83 +654,190 @@ async function publishDailyPhoto(
     }
   }
 
-  const sourceUrl = createWorkerSourceUrl(env, date, request)
+  const sourceRunId = run?.runId || createRunId()
+  const temporarySourceKey = createTemporarySourceKey(date, sourceRunId)
+  let temporarySourceUploaded = false
 
-  const thumb = await fetchTransformedImage(env, sourceUrl, {
-    key: thumbKey,
-    width: 900,
-    quality: 78,
-  })
+  try {
+    if (run) {
+      await recordRunStep(env, run, 'nextcloud_fetch_started', getNextcloudLogDetails(env, date))
+    }
+    const original = await fetchOriginalPhoto(env, date)
 
-  if (!thumb) {
-    const message = `${date}.png was not found in Nextcloud. Skipped.`
-    logWarn('photo_publish_skipped_not_found', {
-      date,
-      sourceUrl: redactPhotoSourceToken(sourceUrl),
-      message,
+    if (!original) {
+      const message = `${date}.png was not found in Nextcloud. Skipped.`
+      if (run) {
+        await recordRunStep(env, run, 'photo_publish_skipped_not_found', { message })
+      }
+      return { date, status: 'not-found', message }
+    }
+
+    if (run) {
+      await recordRunStep(env, run, 'nextcloud_fetch_succeeded', getResponseLog(original))
+      await recordRunStep(env, run, 'temporary_source_put_started', {
+        sourceRunId,
+        contentType: original.headers.get('content-type') || 'image/png',
+        contentLength: original.headers.get('content-length'),
+      })
+    }
+    await env.SOURCE_BUCKET.put(temporarySourceKey, original.body, {
+      httpMetadata: {
+        contentType: original.headers.get('content-type') || 'image/png',
+        cacheControl: 'no-store',
+      },
     })
-    return {
+    temporarySourceUploaded = true
+    if (run) {
+      await recordRunStep(env, run, 'temporary_source_put_succeeded', { sourceRunId })
+    }
+
+    const sourceUrl = createWorkerSourceUrl(env, date, sourceRunId, request)
+    if (run) {
+      await recordRunStep(env, run, 'source_url_created', {
+        sourceUrl: redactPhotoSourceToken(sourceUrl),
+        sourceOrigin: getOrigin(sourceUrl),
+        sourceRunStatusKey: `photos/publisher-source-runs/${date}-${sourceRunId}.json`,
+      })
+    }
+
+    const thumb = await fetchTransformedImage(env, sourceUrl, {
+      key: thumbKey,
+      width: 900,
+      quality: 78,
+    }, run)
+    if (!thumb) {
+      throw new Error(`Temporary source image was not found for ${date}.png.`)
+    }
+    await env.MEDIA_BUCKET.put(thumbKey, thumb.body, {
+      httpMetadata: {
+        contentType: 'image/webp',
+        cacheControl: 'public, max-age=31536000, immutable',
+      },
+    })
+    if (run) {
+      await recordRunStep(env, run, 'r2_put_succeeded', { key: thumbKey, contentType: 'image/webp' })
+    }
+
+    const large = await fetchTransformedImage(env, sourceUrl, {
+      key: largeKey,
+      width: 1920,
+      quality: 82,
+    }, run)
+    if (!large) {
+      throw new Error('Temporary source image disappeared before creating the large variant.')
+    }
+    await env.MEDIA_BUCKET.put(largeKey, large.body, {
+      httpMetadata: {
+        contentType: 'image/webp',
+        cacheControl: 'public, max-age=31536000, immutable',
+      },
+    })
+    if (run) {
+      await recordRunStep(env, run, 'r2_put_succeeded', { key: largeKey, contentType: 'image/webp' })
+      await recordRunStep(env, run, 'photos_json_read_started', { key: photosJsonKey })
+    }
+
+    const photos = await readPhotosJson(env.MEDIA_BUCKET)
+    const nextPhotos = upsertPhoto(photos, {
+      id: createPhotoId(date),
+      key: `photos/${date}`,
+      image: `${date}-thumb.webp`,
+      alt: date.replaceAll('-', ' '),
       date,
-      status: 'not-found',
-      message,
+    })
+    if (run) {
+      await recordRunStep(env, run, 'photos_json_write_started', {
+        key: photosJsonKey,
+        previousCount: photos.length,
+        nextCount: nextPhotos.length,
+      })
+    }
+    await writePhotosJson(env.MEDIA_BUCKET, nextPhotos)
+    const message = `Published ${date} to R2 and updated ${photosJsonKey}.`
+    if (run) {
+      await recordRunStep(env, run, 'photo_publish_succeeded', {
+        photosJsonKey,
+        totalPhotos: nextPhotos.length,
+        message,
+      })
+    }
+    return { date, status: 'published', message }
+  } finally {
+    if (temporarySourceUploaded) {
+      try {
+        await env.SOURCE_BUCKET.delete(temporarySourceKey)
+        if (run) {
+          await recordRunStep(env, run, 'temporary_source_delete_succeeded', { sourceRunId })
+        }
+      } catch (error) {
+        logError('temporary_source_delete_failed', {
+          date,
+          sourceRunId,
+          message: getErrorMessage(error),
+        })
+        if (run) {
+          await recordRunStep(env, run, 'temporary_source_delete_failed', {
+            sourceRunId,
+            message: getErrorMessage(error),
+          })
+        }
+      }
     }
   }
+}
 
-  await env.MEDIA_BUCKET.put(thumbKey, thumb.body, {
-    httpMetadata: {
-      contentType: 'image/webp',
-      cacheControl: 'public, max-age=31536000, immutable',
-    },
-  })
-  logInfo('r2_put_succeeded', {
+async function runPublishDailyPhoto(
+  env: Env,
+  trigger: RunTrigger,
+  controller?: ScheduledController,
+  dateOverride?: string,
+  request?: Request,
+) {
+  const date = dateOverride || getTokyoDate(controller)
+  const run = createRunDiagnostics(date, trigger, controller?.scheduledTime)
+
+  await safeWritePublisherStatus(env, {
     date,
-    key: thumbKey,
-    contentType: 'image/webp',
+    trigger,
+    phase: 'started',
+    scheduledTime: controller?.scheduledTime,
+    runId: run.runId,
+    startedAt: run.startedAt,
+    steps: run.steps,
   })
-
-  const large = await fetchTransformedImage(env, sourceUrl, {
-    key: largeKey,
-    width: 1920,
-    quality: 82,
-  })
-
-  if (!large) {
-    throw new Error(`${date}.png disappeared before creating the large variant.`)
-  }
-
-  await env.MEDIA_BUCKET.put(largeKey, large.body, {
-    httpMetadata: {
-      contentType: 'image/webp',
-      cacheControl: 'public, max-age=31536000, immutable',
-    },
-  })
-  logInfo('r2_put_succeeded', {
+  await recordRunStep(env, run, 'run_started', {
     date,
-    key: largeKey,
-    contentType: 'image/webp',
+    trigger,
+    scheduledTime: controller?.scheduledTime,
   })
 
-  const photos = await readPhotosJson(env.MEDIA_BUCKET)
-  const nextPhotos = upsertPhoto(photos, {
-    id: createPhotoId(date),
-    key: `photos/${date}`,
-    image: `${date}-thumb.webp`,
-    alt: date.replaceAll('-', ' '),
-    date,
-  })
+  try {
+    const result = await publishDailyPhoto(env, controller, date, request, run)
+    await safeWritePublisherStatus(env, {
+      date,
+      trigger,
+      phase: 'completed',
+      result: result.status,
+      message: result.message,
+      scheduledTime: controller?.scheduledTime,
+      runId: run.runId,
+      startedAt: run.startedAt,
+      steps: run.steps,
+    })
 
-  await writePhotosJson(env.MEDIA_BUCKET, nextPhotos)
-  const message = `Published ${date} to R2 and updated ${photosJsonKey}.`
-  logInfo('photo_publish_succeeded', {
-    date,
-    photosJsonKey,
-    totalPhotos: nextPhotos.length,
-    message,
-  })
-  return {
-    date,
-    status: 'published',
-    message,
+    return result
+  } catch (error) {
+    await safeWritePublisherStatus(env, {
+      date,
+      trigger,
+      phase: 'failed',
+      message: getErrorMessage(error),
+      scheduledTime: controller?.scheduledTime,
+      runId: run.runId,
+      startedAt: run.startedAt,
+      steps: run.steps,
+    })
+    throw error
   }
 }
 
@@ -441,7 +864,7 @@ function authorizeSourceToken(token: string, env: Env) {
 export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
-      publishDailyPhoto(env, controller).catch((error) => {
+      runPublishDailyPhoto(env, 'cron', controller).catch((error) => {
         logError('photo_publish_failed', {
           date: getTokyoDate(controller),
           trigger: 'cron',
@@ -470,7 +893,7 @@ export default {
       let result: PublishResult
 
       try {
-        result = await publishDailyPhoto(env, undefined, date || undefined, request)
+        result = await runPublishDailyPhoto(env, 'manual', undefined, date || undefined, request)
       } catch (error) {
         logError('photo_publish_failed', {
           date: date || getTokyoDate(),
@@ -504,7 +927,9 @@ export default {
       })
     }
 
-    const sourceWithTokenMatch = url.pathname.match(/^\/source\/([^/]+)\/(\d{4}-\d{2}-\d{2})\.png$/)
+    const sourceWithTokenMatch = url.pathname.match(
+      /^\/source\/([^/]+)\/(\d{4}-\d{2}-\d{2})\/([a-zA-Z0-9-]+)\.png$/,
+    )
 
     if (sourceWithTokenMatch) {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -522,17 +947,50 @@ export default {
         return new Response('Unauthorized', { status: 401 })
       }
 
-      const original = await fetchOriginalPhoto(env, sourceWithTokenMatch[2])
+      const sourceDate = sourceWithTokenMatch[2]
+      const sourceRunId = sanitizeRunId(sourceWithTokenMatch[3])
 
-      if (!original) {
+      if (!sourceRunId) {
         return new Response('Not Found', { status: 404 })
       }
 
-      return new Response(original.body, {
+      await safeWriteSourceRequestStatus(env, {
+        date: sourceDate,
+        runId: sourceRunId,
+        phase: 'started',
+        message: 'Image Transformations requested the temporary R2 source image.',
+      })
+
+      const original = await env.SOURCE_BUCKET.get(createTemporarySourceKey(sourceDate, sourceRunId))
+
+      if (!original) {
+        await safeWriteSourceRequestStatus(env, {
+          date: sourceDate,
+          runId: sourceRunId,
+          phase: 'completed',
+          message: 'Temporary R2 source image was not found.',
+          response: {
+            status: 404,
+          },
+        })
+        return new Response('Not Found', { status: 404 })
+      }
+
+      await safeWriteSourceRequestStatus(env, {
+        date: sourceDate,
+        runId: sourceRunId,
+        phase: 'completed',
+        message: 'Temporary R2 source image was served to Image Transformations.',
+        response: getR2ObjectLog(original),
+      })
+
+      return new Response(request.method === 'HEAD' ? null : original.body, {
         status: 200,
         headers: {
-          'content-type': original.headers.get('content-type') || 'image/png',
+          'content-type': original.httpMetadata?.contentType || 'image/png',
+          'content-length': String(original.size),
           'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
         },
       })
     }
