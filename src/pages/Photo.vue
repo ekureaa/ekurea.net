@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowLeft, X } from '@lucide/vue'
+import { trapDialogFocus } from '@/utils/dialog'
 
 type PhotoData = {
   id?: number
@@ -93,10 +94,14 @@ const selectedPhoto = ref<Photo | null>(null)
 const visibleCount = ref(0)
 const loadMoreTrigger = ref<HTMLElement | null>(null)
 const loadedPhotoIds = ref(new Set<number>())
+const lightboxDialog = ref<HTMLElement | null>(null)
+const lightboxCloseButton = ref<HTMLButtonElement | null>(null)
 const selectedPhotoUrl = computed(() => selectedPhoto.value?.largeUrl || selectedPhoto.value?.url || '')
 const visiblePhotos = computed(() => photos.value.slice(0, visibleCount.value))
 const hasMorePhotos = computed(() => visibleCount.value < photos.value.length)
 let loadMoreObserver: IntersectionObserver | null = null
+let lightboxTrigger: HTMLElement | null = null
+let previousBodyOverflow = ''
 
 function isPhotoLoaded(photoId: number) {
   return loadedPhotoIds.value.has(photoId)
@@ -115,17 +120,27 @@ function loadMorePhotos() {
 }
 
 function openPhoto(photo: Photo) {
+  lightboxTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
   selectedPhoto.value = photo
+  void nextTick(() => lightboxCloseButton.value?.focus())
 }
 
 function closePhoto() {
   selectedPhoto.value = null
+  void nextTick(() => {
+    lightboxTrigger?.focus()
+    lightboxTrigger = null
+  })
 }
 
-function handleKeydown(event: KeyboardEvent) {
+function handleDialogKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
+    event.preventDefault()
     closePhoto()
+    return
   }
+
+  trapDialogFocus(event, lightboxDialog.value)
 }
 
 async function loadPhotos() {
@@ -151,11 +166,15 @@ async function loadPhotos() {
 }
 
 watch(selectedPhoto, (photo) => {
-  document.body.style.overflow = photo ? 'hidden' : ''
+  if (photo) {
+    previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+  } else {
+    document.body.style.overflow = previousBodyOverflow
+  }
 })
 
 onMounted(() => {
-  window.addEventListener('keydown', handleKeydown)
   void loadPhotos()
 
   if (!loadMoreTrigger.value) {
@@ -177,9 +196,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeydown)
   loadMoreObserver?.disconnect()
-  document.body.style.overflow = ''
+  document.body.style.overflow = previousBodyOverflow
 })
 
 watch(hasMorePhotos, (hasMore) => {
@@ -190,7 +208,10 @@ watch(hasMorePhotos, (hasMore) => {
 </script>
 
 <template>
-  <main class="min-h-dvh bg-cream">
+  <main
+    class="min-h-dvh bg-cream"
+    :inert="selectedPhoto ? true : undefined"
+  >
     <div class="mx-auto max-w-7xl px-6 py-10 sm:px-10 sm:py-14">
       <RouterLink
         to="/"
@@ -252,18 +273,26 @@ watch(hasMorePhotos, (hasMore) => {
       />
     </div>
 
+  </main>
+
+  <Teleport to="body">
     <Transition name="lightbox">
       <div
         v-if="selectedPhoto"
+        ref="lightboxDialog"
         class="fixed inset-0 z-50 grid place-items-center bg-black/90 p-4 sm:p-8"
         role="dialog"
         aria-modal="true"
+        aria-label="写真の拡大表示"
+        tabindex="-1"
         @click.self="closePhoto"
+        @keydown="handleDialogKeydown"
       >
         <button
+          ref="lightboxCloseButton"
           type="button"
-          class="lightbox-close absolute right-4 top-4 grid size-11 place-items-center rounded-full bg-white/12 text-white transition hover:bg-white/22 focus:outline-none sm:right-6 sm:top-6"
-          aria-label="Close photo"
+          class="lightbox-close absolute right-4 top-4 grid size-11 place-items-center rounded-full bg-white/12 text-white transition hover:bg-white/22 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black sm:right-6 sm:top-6"
+          aria-label="写真を閉じる"
           @click="closePhoto"
         >
           <X :size="24" />
@@ -278,7 +307,7 @@ watch(hasMorePhotos, (hasMore) => {
         />
       </div>
     </Transition>
-  </main>
+  </Teleport>
 </template>
 
 <style scoped>

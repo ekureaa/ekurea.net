@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "dev:worker": "vite --mode worker",
+    "types": "wrangler types worker-configuration.d.ts --env-file /dev/null",
+    "types:check": "wrangler types worker-configuration.d.ts --check --env-file /dev/null",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "npm run types:check && npm run typecheck && vite build",
     "preview": "npm run build && wrangler dev",
     "photos:worker:deploy": "wrangler deploy -c workers/photo-publisher/wrangler.jsonc",
     "photos:worker:dev": "wrangler dev -c workers/photo-publisher/wrangler.jsonc",

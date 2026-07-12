@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ArrowLeft, Copy, Download, Gift, KeyRound, Mail, X } from '@lucide/vue'
 import { siGithub, siKeybase, siVrchat, siX } from 'simple-icons'
+import { trapDialogFocus } from '@/utils/dialog'
 
 const pgpKeyUrl = '/pgp/ekurea.asc'
 const pgpFingerprint = 'C155E125150D72438953DFD389F0CEE91E50408D'
@@ -9,6 +10,10 @@ const isPgpOpen = ref(false)
 const pgpKey = ref('')
 const pgpError = ref('')
 const copied = ref(false)
+const pgpDialog = ref<HTMLElement | null>(null)
+const pgpCloseButton = ref<HTMLButtonElement | null>(null)
+let pgpTrigger: HTMLElement | null = null
+let previousBodyOverflow = ''
 
 const links = [
   {
@@ -57,7 +62,10 @@ const links = [
 ]
 
 async function openPgpKey() {
+  pgpTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
   isPgpOpen.value = true
+  await nextTick()
+  pgpCloseButton.value?.focus()
 
   if (pgpKey.value || pgpError.value) return
 
@@ -74,6 +82,20 @@ async function openPgpKey() {
 
 function closePgpKey() {
   isPgpOpen.value = false
+  void nextTick(() => {
+    pgpTrigger?.focus()
+    pgpTrigger = null
+  })
+}
+
+function handlePgpKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closePgpKey()
+    return
+  }
+
+  trapDialogFocus(event, pgpDialog.value)
 }
 
 async function copyPgpKey() {
@@ -85,10 +107,26 @@ async function copyPgpKey() {
     copied.value = false
   }, 1800)
 }
+
+watch(isPgpOpen, (isOpen) => {
+  if (isOpen) {
+    previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+  } else {
+    document.body.style.overflow = previousBodyOverflow
+  }
+})
+
+onBeforeUnmount(() => {
+  document.body.style.overflow = previousBodyOverflow
+})
 </script>
 
 <template>
-  <main class="min-h-dvh bg-cream">
+  <main
+    class="min-h-dvh bg-cream"
+    :inert="isPgpOpen ? true : undefined"
+  >
     <div class="mx-auto max-w-3xl px-6 py-10 sm:px-10 sm:py-14">
       <RouterLink
         to="/"
@@ -136,8 +174,11 @@ async function copyPgpKey() {
       <Transition name="pgp-modal">
         <div
           v-if="isPgpOpen"
+          ref="pgpDialog"
           class="fixed inset-0 z-50 grid place-items-center bg-ink/45 px-4 py-6"
+          tabindex="-1"
           @click.self="closePgpKey"
+          @keydown="handlePgpKeydown"
         >
           <section
             role="dialog"
@@ -151,9 +192,10 @@ async function copyPgpKey() {
                 <p class="mt-1 break-all text-sm text-ink-soft">{{ pgpFingerprint }}</p>
               </div>
               <button
+                ref="pgpCloseButton"
                 type="button"
                 class="grid size-10 shrink-0 place-items-center rounded-full bg-white text-ink-soft transition hover:bg-brown-soft hover:text-ink focus:outline-none focus:ring-2 focus:ring-peach"
-                aria-label="Close"
+                aria-label="PGP鍵を閉じる"
                 @click="closePgpKey"
               >
                 <X :size="20" />
