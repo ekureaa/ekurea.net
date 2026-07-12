@@ -273,41 +273,40 @@ watch(hasMorePhotos, (hasMore) => {
       />
     </div>
 
-  </main>
-
-  <Teleport to="body">
-    <Transition name="lightbox">
-      <div
-        v-if="selectedPhoto"
-        ref="lightboxDialog"
-        class="fixed inset-0 z-50 grid place-items-center bg-black/90 p-4 sm:p-8"
-        role="dialog"
-        aria-modal="true"
-        aria-label="写真の拡大表示"
-        tabindex="-1"
-        @click.self="closePhoto"
-        @keydown="handleDialogKeydown"
-      >
-        <button
-          ref="lightboxCloseButton"
-          type="button"
-          class="lightbox-close absolute right-4 top-4 grid size-11 place-items-center rounded-full bg-white/12 text-white transition hover:bg-white/22 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black sm:right-6 sm:top-6"
-          aria-label="写真を閉じる"
-          @click="closePhoto"
+    <Teleport to="body">
+      <Transition name="lightbox">
+        <div
+          v-if="selectedPhoto"
+          ref="lightboxDialog"
+          class="fixed inset-0 z-50 grid place-items-center bg-black/90 p-4 sm:p-8"
+          role="dialog"
+          aria-modal="true"
+          aria-label="写真の拡大表示"
+          tabindex="-1"
+          @click.self="closePhoto"
+          @keydown="handleDialogKeydown"
         >
-          <X :size="24" />
-        </button>
+          <button
+            ref="lightboxCloseButton"
+            type="button"
+            class="lightbox-close absolute right-4 top-4 grid size-11 place-items-center rounded-full bg-white/12 text-white transition hover:bg-white/22 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black sm:right-6 sm:top-6"
+            aria-label="写真を閉じる"
+            @click="closePhoto"
+          >
+            <X :size="24" />
+          </button>
 
-        <img
-          :src="selectedPhotoUrl"
-          :alt="selectedPhoto.alt"
-          class="lightbox-photo h-auto max-h-[calc(100dvh-6rem)] w-auto max-w-[calc(100vw-2rem)] select-none object-contain sm:max-h-[calc(100dvh-4rem)] sm:max-w-[calc(100vw-4rem)]"
-          draggable="false"
-          decoding="async"
-        />
-      </div>
-    </Transition>
-  </Teleport>
+          <img
+            :src="selectedPhotoUrl"
+            :alt="selectedPhoto.alt"
+            class="lightbox-photo h-auto max-h-[calc(100dvh-6rem)] w-auto max-w-[calc(100vw-2rem)] select-none object-contain sm:max-h-[calc(100dvh-4rem)] sm:max-w-[calc(100vw-4rem)]"
+            draggable="false"
+            decoding="async"
+          />
+        </div>
+      </Transition>
+    </Teleport>
+  </main>
 </template>
 
 <style scoped>
