@@ -8,9 +8,10 @@
 		"enabled": true
 	},
 	"triggers": {
-		// 06:55 JST. Cloudflare Cron is configured in UTC.
+		// 06:55 and 11:55 JST. Cloudflare Cron is configured in UTC.
 		"crons": [
-			"55 21 * * *"
+			"55 21 * * *",
+			"55 2 * * *"
 		]
 	},
 	"r2_buckets": [

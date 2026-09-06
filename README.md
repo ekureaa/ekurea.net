@@ -28,18 +28,28 @@ VITE_MEDIA_BASE_URL=
 
 ## Photo Worker
 
-日々の写真追加は `workers/photo-publisher` の Cloudflare Worker で行います。Nextcloud の非公開WebDAVから当日分の `yyyy-mm-dd.png` を取得し、Cloudflare Image Transformations でWebP変換してR2に保存します。
+日々の写真追加は `workers/photo-publisher` の Cloudflare Worker で行います。Nextcloud の非公開WebDAVから当日分のPNGを取得し、Cloudflare Image Transformations でWebP変換してR2に保存します。
 `large` は Cloudflare のWebP出力が安定する幅として 1920px、`thumb` は 900px で生成します。
+
+元画像のファイル名と公開時刻（JST）:
+
+```sh
+yyyy-mm-dd.png    # 06:55
+yyyy-mm-dd-2.png  # 11:55
+```
 
 R2保存先:
 
 ```sh
 photos/yyyy-mm-dd-large.webp
 photos/yyyy-mm-dd-thumb.webp
+photos/yyyy-mm-dd-2-large.webp
+photos/yyyy-mm-dd-2-thumb.webp
 photos/photos.json
 ```
 
 Workerは `workers/photo-publisher` を使います。Cron実行、Nextcloudからの元画像取得、画像変換、R2更新を担当します。
+同じ公開枠の画像がすでにR2へ保存されている場合、その枠の実行はスキップされます。
 
 Worker の Variables / Secrets:
 
@@ -65,3 +75,5 @@ npm run photos:worker:deploy
 npm run photos:worker:dev
 curl "http://localhost:8787/cdn-cgi/handler/scheduled"
 ```
+
+手動実行で昼分を指定する場合は、通常の認証に加えてクエリへ `slot=2` を付けます。省略時は朝分です。

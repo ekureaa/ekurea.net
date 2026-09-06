@@ -30,11 +30,13 @@ type ImageVariant = {
 
 type PublishResult = {
   date: string
+  slot: PhotoSlot
   status: 'published' | 'skipped' | 'not-found'
   message: string
 }
 
 type RunTrigger = 'cron' | 'manual'
+type PhotoSlot = '1' | '2'
 type RunPhase = 'started' | 'completed' | 'failed'
 type RunStep = {
   at: string
@@ -44,6 +46,7 @@ type RunStep = {
 type RunDiagnostics = {
   runId: string
   date: string
+  slot: PhotoSlot
   trigger: RunTrigger
   startedAt: string
   scheduledTime?: number
@@ -52,6 +55,7 @@ type RunDiagnostics = {
 
 const photosJsonKey = 'photos/photos.json'
 const publisherStatusKey = 'photos/publisher-status.json'
+const noonCron = '55 2 * * *'
 const transformRetryDelaysMs = [10_000, 30_000, 60_000]
 
 function logInfo(event: string, details: Record<string, unknown>) {
@@ -126,11 +130,16 @@ function getOptionalOrigin(value: string) {
   return value ? getOrigin(value) : ''
 }
 
-function getNextcloudLogDetails(env: Env, date: string) {
+function createPhotoBasename(date: string, slot: PhotoSlot) {
+  return slot === '2' ? `${date}-2` : date
+}
+
+function getNextcloudLogDetails(env: Env, date: string, slot: PhotoSlot) {
   return {
     date,
+    slot,
     origin: new URL(requireEnv(env, 'NEXTCLOUD_BASE_URL')).origin,
-    filename: `${date}.png`,
+    filename: `${createPhotoBasename(date, slot)}.png`,
   }
 }
 
@@ -169,6 +178,14 @@ function isDateString(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
+function isPhotoSlot(value: string | null): value is PhotoSlot {
+  return value === '1' || value === '2'
+}
+
+function getScheduledPhotoSlot(controller: ScheduledController): PhotoSlot {
+  return controller.cron === noonCron ? '2' : '1'
+}
+
 function createBasicAuth(username: string, password: string) {
   const bytes = new TextEncoder().encode(`${username}:${password}`)
   let binary = ''
@@ -180,12 +197,12 @@ function createBasicAuth(username: string, password: string) {
   return `Basic ${btoa(binary)}`
 }
 
-function createNextcloudUrl(env: Env, date: string) {
+function createNextcloudUrl(env: Env, date: string, slot: PhotoSlot) {
   const baseUrl = requireEnv(env, 'NEXTCLOUD_BASE_URL').replace(/\/+$/, '')
   const username = requireEnv(env, 'NEXTCLOUD_USERNAME')
   const dailyDir = requireEnv(env, 'NEXTCLOUD_DAILY_DIR')
 
-  return `${baseUrl}/remote.php/dav/files/${encodePath(username)}/${encodePath(dailyDir)}/${date}.png`
+  return `${baseUrl}/remote.php/dav/files/${encodePath(username)}/${encodePath(dailyDir)}/${createPhotoBasename(date, slot)}.png`
 }
 
 function createTemporarySourceKey(date: string, runId: string) {
@@ -202,11 +219,11 @@ function createWorkerSourceUrl(env: Env, date: string, runId: string, request?: 
   return `${baseUrl}/source/${encodeURIComponent(requireEnv(env, 'PHOTO_SOURCE_TOKEN'))}/${date}/${encodeURIComponent(runId)}.png`
 }
 
-async function fetchOriginalPhoto(env: Env, date: string) {
+async function fetchOriginalPhoto(env: Env, date: string, slot: PhotoSlot) {
   const username = requireEnv(env, 'NEXTCLOUD_USERNAME')
   const appPassword = requireEnv(env, 'NEXTCLOUD_APP_PASSWORD')
-  const sourceUrl = createNextcloudUrl(env, date)
-  const logDetails = getNextcloudLogDetails(env, date)
+  const sourceUrl = createNextcloudUrl(env, date, slot)
+  const logDetails = getNextcloudLogDetails(env, date, slot)
   logInfo('nextcloud_fetch_started', {
     ...logDetails,
   })
@@ -232,7 +249,7 @@ async function fetchOriginalPhoto(env: Env, date: string) {
       hasBody: Boolean(response.body),
       ...getResponseLog(response),
     })
-    throw new Error(`Nextcloud fetch failed for ${date}.png: ${response.status}`)
+    throw new Error(`Nextcloud fetch failed for ${createPhotoBasename(date, slot)}.png: ${response.status}`)
   }
 
   logInfo('nextcloud_fetch_succeeded', {
@@ -413,18 +430,14 @@ function getSortValue(photo: PhotoRecord) {
   return photo.date || photo.key || photo.large || photo.thumb || photo.image || ''
 }
 
-function createPhotoId(date: string) {
-  return Number(date.replaceAll('-', ''))
+function createPhotoId(date: string, slot: PhotoSlot = '1') {
+  const dateId = date.replaceAll('-', '')
+
+  return Number(slot === '2' ? `${dateId}2` : dateId)
 }
 
 function upsertPhoto(photos: PhotoRecord[], photo: PhotoRecord) {
-  const nextPhotos = photos.filter((item) => {
-    if (photo.date && item.date === photo.date) {
-      return false
-    }
-
-    return item.key !== photo.key
-  })
+  const nextPhotos = photos.filter((item) => item.key !== photo.key)
 
   return [photo, ...nextPhotos]
     .sort((a, b) => getSortValue(b).localeCompare(getSortValue(a)))
@@ -447,6 +460,7 @@ async function writePublisherStatus(
   env: Env,
   status: {
     date: string
+    slot: PhotoSlot
     trigger: RunTrigger
     phase: RunPhase
     result?: PublishResult['status']
@@ -465,7 +479,7 @@ async function writePublisherStatus(
     null,
     2,
   )}\n`
-  const runStatusKey = `photos/publisher-runs/${status.date}-${status.trigger}.json`
+  const runStatusKey = `photos/publisher-runs/${createPhotoBasename(status.date, status.slot)}-${status.trigger}.json`
   const metadata = {
     httpMetadata: {
       contentType: 'application/json; charset=utf-8',
@@ -488,6 +502,7 @@ async function safeWritePublisherStatus(
   } catch (error) {
     logError('publisher_status_write_failed', {
       date: status.date,
+      slot: status.slot,
       trigger: status.trigger,
       phase: status.phase,
       message: getErrorMessage(error),
@@ -495,10 +510,16 @@ async function safeWritePublisherStatus(
   }
 }
 
-function createRunDiagnostics(date: string, trigger: RunTrigger, scheduledTime?: number): RunDiagnostics {
+function createRunDiagnostics(
+  date: string,
+  slot: PhotoSlot,
+  trigger: RunTrigger,
+  scheduledTime?: number,
+): RunDiagnostics {
   return {
     runId: createRunId(),
     date,
+    slot,
     trigger,
     startedAt: new Date().toISOString(),
     scheduledTime,
@@ -520,6 +541,7 @@ async function recordRunStep(
 
   await safeWritePublisherStatus(env, {
     date: run.date,
+    slot: run.slot,
     trigger: run.trigger,
     phase: 'started',
     scheduledTime: run.scheduledTime,
@@ -574,14 +596,16 @@ async function safeWriteSourceRequestStatus(
 
 async function publishDailyPhoto(
   env: Env,
+  slot: PhotoSlot,
   controller?: ScheduledController,
   dateOverride?: string,
   request?: Request,
   run?: RunDiagnostics,
 ): Promise<PublishResult> {
   const date = dateOverride || getTokyoDate(controller)
-  const largeKey = `photos/${date}-large.webp`
-  const thumbKey = `photos/${date}-thumb.webp`
+  const basename = createPhotoBasename(date, slot)
+  const largeKey = `photos/${basename}-large.webp`
+  const thumbKey = `photos/${basename}-thumb.webp`
 
   requireEnv(env, 'MEDIA_BASE_URL')
   requireEnv(env, 'NEXTCLOUD_BASE_URL')
@@ -603,6 +627,7 @@ async function publishDailyPhoto(
 
   logInfo('photo_publish_started', {
     date,
+    slot,
     trigger: controller ? 'cron' : 'manual',
     largeKey,
     thumbKey,
@@ -610,6 +635,7 @@ async function publishDailyPhoto(
   })
   if (run) {
     await recordRunStep(env, run, 'photo_publish_started', {
+      slot,
       largeKey,
       thumbKey,
       scheduledTime: controller?.scheduledTime,
@@ -649,6 +675,7 @@ async function publishDailyPhoto(
     }
     return {
       date,
+      slot,
       status: 'skipped',
       message,
     }
@@ -660,16 +687,16 @@ async function publishDailyPhoto(
 
   try {
     if (run) {
-      await recordRunStep(env, run, 'nextcloud_fetch_started', getNextcloudLogDetails(env, date))
+      await recordRunStep(env, run, 'nextcloud_fetch_started', getNextcloudLogDetails(env, date, slot))
     }
-    const original = await fetchOriginalPhoto(env, date)
+    const original = await fetchOriginalPhoto(env, date, slot)
 
     if (!original) {
-      const message = `${date}.png was not found in Nextcloud. Skipped.`
+      const message = `${basename}.png was not found in Nextcloud. Skipped.`
       if (run) {
         await recordRunStep(env, run, 'photo_publish_skipped_not_found', { message })
       }
-      return { date, status: 'not-found', message }
+      return { date, slot, status: 'not-found', message }
     }
 
     if (run) {
@@ -706,7 +733,7 @@ async function publishDailyPhoto(
       quality: 78,
     }, run)
     if (!thumb) {
-      throw new Error(`Temporary source image was not found for ${date}.png.`)
+      throw new Error(`Temporary source image was not found for ${basename}.png.`)
     }
     await env.MEDIA_BUCKET.put(thumbKey, thumb.body, {
       httpMetadata: {
@@ -739,9 +766,9 @@ async function publishDailyPhoto(
 
     const photos = await readPhotosJson(env.MEDIA_BUCKET)
     const nextPhotos = upsertPhoto(photos, {
-      id: createPhotoId(date),
-      key: `photos/${date}`,
-      image: `${date}-thumb.webp`,
+      id: createPhotoId(date, slot),
+      key: `photos/${basename}`,
+      image: `${basename}-thumb.webp`,
       alt: date.replaceAll('-', ' '),
       date,
     })
@@ -753,7 +780,7 @@ async function publishDailyPhoto(
       })
     }
     await writePhotosJson(env.MEDIA_BUCKET, nextPhotos)
-    const message = `Published ${date} to R2 and updated ${photosJsonKey}.`
+    const message = `Published ${basename} to R2 and updated ${photosJsonKey}.`
     if (run) {
       await recordRunStep(env, run, 'photo_publish_succeeded', {
         photosJsonKey,
@@ -761,7 +788,7 @@ async function publishDailyPhoto(
         message,
       })
     }
-    return { date, status: 'published', message }
+    return { date, slot, status: 'published', message }
   } finally {
     if (temporarySourceUploaded) {
       try {
@@ -789,15 +816,17 @@ async function publishDailyPhoto(
 async function runPublishDailyPhoto(
   env: Env,
   trigger: RunTrigger,
+  slot: PhotoSlot,
   controller?: ScheduledController,
   dateOverride?: string,
   request?: Request,
 ) {
   const date = dateOverride || getTokyoDate(controller)
-  const run = createRunDiagnostics(date, trigger, controller?.scheduledTime)
+  const run = createRunDiagnostics(date, slot, trigger, controller?.scheduledTime)
 
   await safeWritePublisherStatus(env, {
     date,
+    slot,
     trigger,
     phase: 'started',
     scheduledTime: controller?.scheduledTime,
@@ -807,14 +836,16 @@ async function runPublishDailyPhoto(
   })
   await recordRunStep(env, run, 'run_started', {
     date,
+    slot,
     trigger,
     scheduledTime: controller?.scheduledTime,
   })
 
   try {
-    const result = await publishDailyPhoto(env, controller, date, request, run)
+    const result = await publishDailyPhoto(env, slot, controller, date, request, run)
     await safeWritePublisherStatus(env, {
       date,
+      slot,
       trigger,
       phase: 'completed',
       result: result.status,
@@ -829,6 +860,7 @@ async function runPublishDailyPhoto(
   } catch (error) {
     await safeWritePublisherStatus(env, {
       date,
+      slot,
       trigger,
       phase: 'failed',
       message: getErrorMessage(error),
@@ -863,10 +895,13 @@ function authorizeSourceToken(token: string, env: Env) {
 
 export default {
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    const slot = getScheduledPhotoSlot(controller)
+
     ctx.waitUntil(
-      runPublishDailyPhoto(env, 'cron', controller).catch((error) => {
+      runPublishDailyPhoto(env, 'cron', slot, controller).catch((error) => {
         logError('photo_publish_failed', {
           date: getTokyoDate(controller),
+          slot,
           trigger: 'cron',
           scheduledTime: controller.scheduledTime,
           message: getErrorMessage(error),
@@ -885,18 +920,24 @@ export default {
       }
 
       const date = url.searchParams.get('date')
+      const slot = url.searchParams.get('slot') || '1'
 
       if (date && !isDateString(date)) {
         return new Response('Invalid date. Use yyyy-mm-dd.', { status: 400 })
       }
 
+      if (!isPhotoSlot(slot)) {
+        return new Response('Invalid slot. Use 1 or 2.', { status: 400 })
+      }
+
       let result: PublishResult
 
       try {
-        result = await runPublishDailyPhoto(env, 'manual', undefined, date || undefined, request)
+        result = await runPublishDailyPhoto(env, 'manual', slot, undefined, date || undefined, request)
       } catch (error) {
         logError('photo_publish_failed', {
           date: date || getTokyoDate(),
+          slot,
           trigger: 'manual',
           message: getErrorMessage(error),
         })
@@ -904,6 +945,7 @@ export default {
           `${JSON.stringify(
             {
               date: date || getTokyoDate(),
+              slot,
               status: 'error',
               message: error instanceof Error ? error.message : 'Photo publish failed.',
             },
