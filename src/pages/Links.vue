@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { ArrowLeft, Copy, Download, Gift, KeyRound, Mail, X } from '@lucide/vue'
+import { ArrowLeft, Copy, Download, Gift, KeyRound, Mail, Package, X } from '@lucide/vue'
 import { siGithub, siKeybase, siVrchat, siX } from 'simple-icons'
 import { trapDialogFocus } from '@/utils/dialog'
 
@@ -27,6 +27,12 @@ const links = [
     username: '@ekureaa_vrc',
     url: 'https://x.com/ekureaa_vrc',
     brandIcon: siX,
+  },
+  {
+    name: 'VPM Repository',
+    username: 'vpm.ekurea.net',
+    url: 'https://vpm.ekurea.net/',
+    icon: Package,
   },
   {
     name: 'Email',
