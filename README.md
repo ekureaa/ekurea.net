@@ -77,3 +77,9 @@ curl "http://localhost:8787/cdn-cgi/handler/scheduled"
 ```
 
 手動実行で昼分を指定する場合は、通常の認証に加えてクエリへ `slot=2` を付けます。省略時は朝分です。
+
+## Diary Publisher
+
+`diary-admin.ekurea.net` のスマートフォン向けフォームから、ブログの日記を投稿できます。Cloudflare Accessで管理画面を保護し、Workerが写真とカード画像をR2へ保存して、日記のMarkdownをGitHubへ追加します。
+
+詳細な設定は [`workers/diary-publisher/README.md`](workers/diary-publisher/README.md) を参照してください。

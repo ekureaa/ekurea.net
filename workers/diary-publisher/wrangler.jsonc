@@ -1,0 +1,39 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "ekurea-diary-publisher",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-24",
+  "workers_dev": false,
+  "observability": {
+    "enabled": true
+  },
+  "routes": [
+    {
+      "pattern": "diary-admin.ekurea.net",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "images": {
+    "binding": "IMAGES"
+  },
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_BUCKET",
+      "bucket_name": "media-ekurea-net"
+    }
+  ],
+  "vars": {
+    "GITHUB_OWNER": "ekureaa",
+    "GITHUB_REPO": "ekurea.net",
+    "GITHUB_BRANCH": "main",
+    "BLOG_BASE_URL": "https://blog.ekurea.net",
+    "MEDIA_BASE_URL": "https://media.ekurea.net",
+    "FAVICON_URL": "https://blog.ekurea.net/favicon.png",
+    "CARD_FONT_URL": "https://fonts.gstatic.com/s/zenmarugothic/v19/o-0XIpIxzW5b-RxT-6A8jWAtCp-cGWtCPA.ttf"
+  }
+}

@@ -16,12 +16,21 @@ export default defineEventHandler(async (event) => {
     .select('path', 'date', 'updated')
     .order('date', 'DESC')
     .all()
-  const latestDate = posts
+  const diaries = await queryCollection(event, 'diary')
+    .select('path', 'date', 'updated')
+    .order('date', 'DESC')
+    .all()
+  const latestDate = [...posts, ...diaries]
     .map(post => post.updated || post.date)
     .sort((a, b) => b.localeCompare(a))[0]
   const urls = [
     { path: '/', lastmod: latestDate },
+    { path: '/diary', lastmod: diaries[0]?.updated || diaries[0]?.date },
     ...posts.map(post => ({
+      path: post.path,
+      lastmod: post.updated || post.date,
+    })),
+    ...diaries.map(post => ({
       path: post.path,
       lastmod: post.updated || post.date,
     })),

@@ -11,6 +11,8 @@ npm run dev
 
 記事は `content/blog/` に Markdown で追加します。
 
+日記は `content/diary/` に保存されます。通常は `diary-admin.ekurea.net` の専用フォームから投稿し、`workers/diary-publisher` がMarkdownと画像を作成します。日記一覧は `/diary`、個別ページは `/diary/<slug>` です。
+
 記事を更新した場合はfrontmatterに更新日を追加します。未指定の場合は公開日が最終更新日として扱われます。
 
 ```yaml

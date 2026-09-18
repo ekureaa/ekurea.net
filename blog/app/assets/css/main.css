@@ -42,7 +42,6 @@ a {
 }
 
 .site-header {
-  border-bottom: 1px solid var(--border);
   background: rgba(255, 253, 249, 0.94);
 }
 
@@ -93,6 +92,61 @@ a {
 .site-nav a:hover,
 .text-link:hover {
   opacity: 0.68;
+}
+
+.content-tabs {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--milk);
+}
+
+.content-tabs-inner {
+  display: flex;
+  width: min(100% - 40px, 1040px);
+  margin-inline: auto;
+  gap: 8px;
+}
+
+.content-tab {
+  position: relative;
+  min-width: 112px;
+  padding: 12px 24px 13px;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-align: center;
+  text-decoration: none;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.content-tab:hover {
+  background: var(--cream);
+  color: var(--ink);
+}
+
+.content-tab:focus-visible {
+  outline: 2px solid var(--peach);
+  outline-offset: -4px;
+}
+
+.content-tab::after {
+  position: absolute;
+  right: 14px;
+  bottom: -1px;
+  left: 14px;
+  height: 3px;
+  border-radius: 999px 999px 0 0;
+  background: transparent;
+  content: "";
+}
+
+.content-tab-active {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.content-tab-active::after {
+  background: var(--peach);
 }
 
 .eyebrow {
@@ -185,6 +239,54 @@ a {
   font-size: 1.45rem;
   font-weight: 500;
   line-height: 1.4;
+}
+
+.diary-list {
+  width: min(100%, 760px);
+  border-top: 1px solid var(--border);
+}
+
+.diary-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.diary-link {
+  display: block;
+  padding: 24px 4px 26px;
+  text-decoration: none;
+  transition: background-color 180ms ease, padding 180ms ease;
+}
+
+.diary-link:hover {
+  padding-inline: 14px;
+  background: var(--milk);
+}
+
+.diary-link time {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.diary-link h2 {
+  margin: 5px 0 0;
+  font-size: 1.35rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.diary-link p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.empty-message {
+  margin: 0;
+  color: var(--ink-soft);
 }
 
 .tag-list {
@@ -387,7 +489,7 @@ a {
 
 .error-page {
   display: grid;
-  min-height: calc(100vh - 73px);
+  min-height: calc(100vh - 120px);
   place-items: center;
   padding: 56px 20px 88px;
   background: var(--cream);
@@ -464,6 +566,18 @@ a {
 
   .site-nav {
     gap: 14px;
+    font-size: 0.82rem;
+  }
+
+  .content-tabs-inner {
+    width: 100%;
+    gap: 0;
+  }
+
+  .content-tab {
+    flex: 1;
+    min-width: 0;
+    padding-block: 11px 12px;
   }
 
   .page-heading h1 {
