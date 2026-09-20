@@ -16,6 +16,8 @@
     "diary:worker:deploy": "wrangler deploy -c workers/diary-publisher/wrangler.jsonc",
     "diary:worker:dev": "wrangler dev -c workers/diary-publisher/wrangler.jsonc",
     "diary:worker:typecheck": "tsc -p workers/diary-publisher/tsconfig.json --noEmit",
+    "diary:db:migrate": "wrangler d1 migrations apply ekurea-diary --remote -c workers/diary-publisher/wrangler.jsonc",
+    "diary:db:migrate:local": "wrangler d1 migrations apply ekurea-diary --local -c workers/diary-publisher/wrangler.jsonc",
     "blog:images:upload": "node scripts/upload-blog-images.mjs",
     "blog:publish": "npm run blog:images:upload && npm --prefix blog run generate:local",
     "deploy": "npm run build && wrangler deploy"
@@ -36,6 +38,6 @@
     "typescript": "^5.6.3",
     "vite": "^6.3.5",
     "vue-tsc": "^2.2.0",
-    "wrangler": "^4.94.0"
+    "wrangler": "^4.135.0"
   }
 }

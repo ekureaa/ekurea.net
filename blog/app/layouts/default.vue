@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const route = useRoute()
 const isDiary = computed(() => route.path === '/diary' || route.path.startsWith('/diary/'))
+const isContentIndex = computed(() => route.path === '/' || route.path === '/diary' || route.path === '/diary/')
 </script>
 
 <template>
@@ -16,30 +17,28 @@ const isDiary = computed(() => route.path === '/diary' || route.path.startsWith(
           <a href="https://ekurea.net">ekurea.net に戻る</a>
         </nav>
       </div>
-
-      <nav class="content-tabs" aria-label="ブログの表示切り替え">
-        <div class="content-tabs-inner">
-          <NuxtLink
-            to="/"
-            class="content-tab"
-            :class="{ 'content-tab-active': !isDiary }"
-            :aria-current="!isDiary ? 'page' : undefined"
-          >
-            記事
-          </NuxtLink>
-          <NuxtLink
-            to="/diary"
-            class="content-tab"
-            :class="{ 'content-tab-active': isDiary }"
-            :aria-current="isDiary ? 'page' : undefined"
-          >
-            日記
-          </NuxtLink>
-        </div>
-      </nav>
     </header>
 
     <main>
+      <nav v-if="isContentIndex" class="content-switcher" aria-label="ブログの表示切り替え">
+        <NuxtLink
+          to="/"
+          class="content-switch-button"
+          :class="{ 'content-switch-button-active': !isDiary }"
+          :aria-current="!isDiary ? 'page' : undefined"
+        >
+          記事
+        </NuxtLink>
+        <NuxtLink
+          to="/diary"
+          class="content-switch-button"
+          :class="{ 'content-switch-button-active': isDiary }"
+          :aria-current="isDiary ? 'page' : undefined"
+        >
+          日記
+        </NuxtLink>
+      </nav>
+
       <slot />
     </main>
   </div>

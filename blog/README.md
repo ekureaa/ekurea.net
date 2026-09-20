@@ -13,6 +13,8 @@ npm run dev
 
 日記は `content/diary/` に保存されます。通常は `diary-admin.ekurea.net` の専用フォームから投稿し、`workers/diary-publisher` がMarkdownと画像を作成します。日記一覧は `/diary`、個別ページは `/diary/<slug>` です。
 
+日記のSNSリンクプレビューは `public/diary-card.png` を共通で使用します。Xでは小さい正方形画像のsummaryカードとして表示し、画像内はfaviconと `ekurea.net` の表記だけにしています。
+
 記事を更新した場合はfrontmatterに更新日を追加します。未指定の場合は公開日が最終更新日として扱われます。
 
 ```yaml
@@ -33,6 +35,18 @@ image:
 ```md
 ![画像の説明](content/example.png)
 ```
+
+YouTube動画はプライバシー強化モードのプレイヤー、Xの投稿は公式ウィジェットとして、記事と日記の両方で表示できます。Xのウィジェットには `data-dnt="true"` を指定し、読み込めない場合も投稿へのリンクを残します。記事のMarkdownでは次のMDC記法を使います。
+
+```md
+::youtube-embed{url="https://www.youtube.com/watch?v=VIDEO_ID"}
+::
+
+::x-link-card{url="https://x.com/account/status/POST_ID"}
+::
+```
+
+日記投稿画面では、本文へYouTube動画またはXの投稿URLを貼り付けると同じ記法へ自動変換されます。
 
 `npm run dev` では両方ともローカルのPNGを直接表示します。本番ビルドでは拡張子を `.webp` に変え、それぞれ `VITE_MEDIA_BASE_URL/blog/thumbnails/` と `VITE_MEDIA_BASE_URL/blog/content/` 配下のR2 URLへ切り替わります。
 

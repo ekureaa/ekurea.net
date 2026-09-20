@@ -1,7 +1,10 @@
 <script setup lang="ts">
+const config = useRuntimeConfig()
+const socialImageUrl = `${config.public.siteUrl}/diary-card.png`
+
 const { data: entries } = await useAsyncData('all-diary-entries', () => queryCollection('diary')
   .order('date', 'DESC')
-  .select('path', 'title', 'description', 'date')
+  .select('path', 'title', 'date')
   .all())
 
 useSeoMeta({
@@ -11,7 +14,13 @@ useSeoMeta({
   ogDescription: 'ekurea.net の日記。',
   ogType: 'website',
   ogUrl: 'https://blog.ekurea.net/diary',
+  ogImage: socialImageUrl,
+  ogImageWidth: 600,
+  ogImageHeight: 600,
+  ogImageAlt: 'ekurea.net',
   twitterCard: 'summary',
+  twitterImage: socialImageUrl,
+  twitterImageAlt: 'ekurea.net',
 })
 
 useHead({

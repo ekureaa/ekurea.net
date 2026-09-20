@@ -1,7 +1,6 @@
 <script setup lang="ts">
 const route = useRoute()
 const config = useRuntimeConfig()
-const resolveImageUrl = useBlogImageUrl()
 const path = `/diary/${route.params.slug}`
 
 const { data: entry } = await useAsyncData(path, () => queryCollection('diary').path(path).first())
@@ -11,7 +10,7 @@ if (!entry.value) {
 }
 
 const canonicalUrl = `${config.public.siteUrl}${path}`
-const imageUrl = computed(() => resolveImageUrl(entry.value?.image?.src))
+const socialImageUrl = `${config.public.siteUrl}/diary-card.png`
 const blogPostingJsonLd = computed(() => {
   const diary = entry.value
 
@@ -37,7 +36,7 @@ const blogPostingJsonLd = computed(() => {
       url: 'https://ekurea.net/about',
     },
     inLanguage: 'ja-JP',
-    ...(imageUrl.value ? { image: [imageUrl.value] } : {}),
+    image: [socialImageUrl],
   }).replaceAll('<', '\\u003c')
 })
 
@@ -48,17 +47,17 @@ useSeoMeta({
   ogDescription: () => entry.value?.description,
   ogType: 'article',
   ogUrl: canonicalUrl,
-  ogImage: imageUrl,
-  ogImageWidth: 1200,
-  ogImageHeight: 630,
-  ogImageAlt: () => entry.value?.image?.alt,
+  ogImage: socialImageUrl,
+  ogImageWidth: 600,
+  ogImageHeight: 600,
+  ogImageAlt: 'ekurea.net',
   articlePublishedTime: () => entry.value?.date,
   articleModifiedTime: () => entry.value?.updated || entry.value?.date,
-  twitterCard: 'summary_large_image',
+  twitterCard: 'summary',
   twitterTitle: () => entry.value?.title,
   twitterDescription: () => entry.value?.description,
-  twitterImage: imageUrl,
-  twitterImageAlt: () => entry.value?.image?.alt,
+  twitterImage: socialImageUrl,
+  twitterImageAlt: 'ekurea.net',
 })
 
 useHead(() => ({
