@@ -422,15 +422,15 @@ input[type="url"]:focus,
 }
 
 .diary-preview > h2 {
-  margin: 0 0 34px;
-  font-size: clamp(1.55rem, 5vw, 2.25rem);
+  margin: 0 0 38px;
+  font-size: clamp(1.45rem, 5vw, 1.65rem);
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
 .markdown-preview {
-  line-height: 1.9;
+  line-height: 2;
   overflow-wrap: anywhere;
 }
 
@@ -459,8 +459,16 @@ input[type="url"]:focus,
 .markdown-preview p,
 .markdown-preview ul,
 .markdown-preview ol,
-.markdown-preview blockquote {
-  margin-block: 1.2em;
+.markdown-preview blockquote:not(.twitter-tweet) {
+  margin-block: 1.9em;
+}
+
+.markdown-preview li > p {
+  margin-block: 0;
+}
+
+.markdown-preview li + li {
+  margin-top: 0.5em;
 }
 
 .markdown-preview a {
@@ -720,6 +728,10 @@ input[type="url"]:focus,
 
   .editor-panel {
     padding: 10px;
+  }
+
+  .markdown-preview {
+    line-height: 1.95;
   }
 
   .draft-date-field {

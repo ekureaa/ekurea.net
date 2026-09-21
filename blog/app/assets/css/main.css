@@ -473,6 +473,48 @@ a {
   font-weight: 500;
 }
 
+.diary-article .article-container {
+  width: min(100% - 40px, 640px);
+}
+
+.diary-article .article-heading {
+  margin-top: 48px;
+}
+
+.diary-article .article-heading h1 {
+  margin: 0;
+  font-size: 1.65rem;
+  line-height: 1.6;
+}
+
+.diary-article .article-meta {
+  margin-top: 48px;
+}
+
+.diary-article .article-body {
+  padding-top: 36px;
+  line-height: 2;
+  overflow-wrap: anywhere;
+}
+
+.diary-article .article-body :is(p, ul, ol, blockquote:not(.twitter-tweet)) {
+  margin-block: 1.9em;
+}
+
+.diary-article .article-body li > p {
+  margin-block: 0;
+}
+
+.diary-article .article-body li + li {
+  margin-top: 0.5em;
+}
+
+.diary-article .article-body hr {
+  margin: 2.8em 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
 .error-page {
   display: grid;
   min-height: calc(100vh - 120px);
@@ -611,6 +653,19 @@ a {
   .article-body {
     width: min(100% - 28px, 760px);
     padding: 12px 0 84px;
+  }
+
+  .diary-article .article-container {
+    width: min(100% - 28px, 640px);
+  }
+
+  .diary-article .article-heading h1 {
+    font-size: 1.45rem;
+  }
+
+  .diary-article .article-body {
+    padding-top: 32px;
+    line-height: 1.95;
   }
 
   .error-content h1 {
