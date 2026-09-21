@@ -72,6 +72,7 @@ useHead(() => ({
 }))
 
 const formattedDate = new Intl.DateTimeFormat('ja-JP', {
+  timeZone: 'Asia/Tokyo',
   year: 'numeric',
   month: 'long',
   day: 'numeric',
@@ -79,6 +80,7 @@ const formattedDate = new Intl.DateTimeFormat('ja-JP', {
 
 const formattedUpdatedDate = computed(() => post.value?.updated
   ? new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
       year: 'numeric',
       month: 'long',
       day: 'numeric',

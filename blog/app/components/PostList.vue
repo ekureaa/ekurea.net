@@ -11,6 +11,7 @@ defineProps<{
 }>()
 
 const formatDate = (date: string) => new Intl.DateTimeFormat('ja-JP', {
+  timeZone: 'Asia/Tokyo',
   year: 'numeric',
   month: 'long',
   day: 'numeric',
